@@ -1,14 +1,29 @@
 #pragma once
 #include "baseobject.h"
 
+#define MAX_CHILDREN               1
+#define MAX_VIEWS                  1
+#define BITS_PER_BYTE              8
+
 typedef struct _QXL_FLAGS
 {
     UINT DriverStarted           : 1; // ( 1) 1 after StartDevice and 0 after StopDevice
     UINT Unused                  : 31;
 } QXL_FLAGS;
 
-#define MAX_CHILDREN               1
-#define MAX_VIEWS                  1
+// For the following macros, c must be a UCHAR.
+#define UPPER_6_BITS(c)   (((c) & rMaskTable[6 - 1]) >> 2)
+#define UPPER_5_BITS(c)   (((c) & rMaskTable[5 - 1]) >> 3)
+#define LOWER_6_BITS(c)   (((BYTE)(c)) & lMaskTable[BITS_PER_BYTE - 6])
+#define LOWER_5_BITS(c)   (((BYTE)(c)) & lMaskTable[BITS_PER_BYTE - 5])
+
+
+#define SHIFT_FOR_UPPER_5_IN_565   (6 + 5)
+#define SHIFT_FOR_MIDDLE_6_IN_565  (5)
+#define SHIFT_UPPER_5_IN_565_BACK  ((BITS_PER_BYTE * 2) + (BITS_PER_BYTE - 5))
+#define SHIFT_MIDDLE_6_IN_565_BACK ((BITS_PER_BYTE * 1) + (BITS_PER_BYTE - 6))
+#define SHIFT_LOWER_5_IN_565_BACK  ((BITS_PER_BYTE * 0) + (BITS_PER_BYTE - 5))
+
 
 #pragma pack(push)
 #pragma pack(1)
@@ -116,6 +131,79 @@ NTHALAPI NTSTATUS x86BiosWriteMemory (USHORT, USHORT, PVOID, ULONG);
 }
 #endif
 
+struct DoPresentMemory
+{
+    PVOID                     DstAddr;
+    UINT                      DstStride;
+    ULONG                     DstBitPerPixel;
+    UINT                      SrcWidth;
+    UINT                      SrcHeight;
+    BYTE*                     SrcAddr;
+    LONG                      SrcPitch;
+    ULONG                     NumMoves;             // in:  Number of screen to screen moves
+    D3DKMT_MOVE_RECT*         Moves;               // in:  Point to the list of moves
+    ULONG                     NumDirtyRects;        // in:  Number of direct rects
+    RECT*                     DirtyRect;           // in:  Point to the list of dirty rects
+    D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation;
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID  SourceID;
+    HANDLE                    hAdapter;
+    PMDL                      Mdl;
+    PVOID                     DisplaySource;
+};
+
+typedef struct _BLT_INFO
+{
+    PVOID pBits;
+    UINT Pitch;
+    UINT BitsPerPel;
+    POINT Offset; // To unrotated top-left of dirty rects
+    D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation;
+    UINT Width; // For the unrotated image
+    UINT Height; // For the unrotated image
+} BLT_INFO;
+
+// Represents the current mode, may not always be set (i.e. frame buffer mapped) if representing the mode passed in on single mode setups.
+typedef struct _CURRENT_BDD_MODE
+{
+    // The source mode currently set for HW Framebuffer
+    // For sample driver this info filled in StartDevice by the OS and never changed.
+    DXGK_DISPLAY_INFORMATION             DispInfo;
+
+    // The rotation of the current mode. Rotation is performed in software during Present call
+    D3DKMDT_VIDPN_PRESENT_PATH_ROTATION  Rotation;
+
+    D3DKMDT_VIDPN_PRESENT_PATH_SCALING Scaling;
+    // This mode might be different from one which are supported for HW frame buffer
+    // Scaling/displasment might be needed (if supported)
+    UINT SrcModeWidth;
+    UINT SrcModeHeight;
+
+    // Various boolean flags the struct uses
+    struct _CURRENT_BDD_MODE_FLAGS
+    {
+        UINT SourceNotVisible     : 1; // 0 if source is visible
+        UINT FullscreenPresent    : 1; // 0 if should use dirty rects for present
+        UINT FrameBufferIsActive  : 1; // 0 if not currently active (i.e. target not connected to source)
+        UINT DoNotMapOrUnmap      : 1; // 1 if the FrameBuffer should not be (un)mapped during normal execution
+        UINT IsInternal           : 1; // 1 if it was determined (i.e. through ACPI) that an internal panel is being driven
+        UINT Unused               : 27;
+    } Flags;
+
+    // The start and end of physical memory known to be all zeroes. Used to optimize the BlackOutScreen function to not write
+    // zeroes to memory already known to be zero. (Physical address is located in DispInfo)
+    PHYSICAL_ADDRESS ZeroedOutStart;
+    PHYSICAL_ADDRESS ZeroedOutEnd;
+
+    // Linear frame buffer pointer
+    // A union with a ULONG64 is used here to ensure this struct looks the same on 32bit and 64bit builds
+    // since the size of a VOID* changes depending on the build.
+    union
+    {
+        VOID*                            Ptr;
+        ULONG64                          Force8Bytes;
+    } FrameBuffer;
+} CURRENT_BDD_MODE;
+
 
 class QxlDod :
     public BaseObject
@@ -132,6 +220,9 @@ private:
     ULONG m_ModeCount;
     PUSHORT m_ModeNumbers;
     USHORT m_CurrentMode;
+    CURRENT_BDD_MODE m_CurrentModes[MAX_VIEWS];
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID m_SystemDisplaySourceId;
+    DXGKARG_SETPOINTERSHAPE m_PointerShape;
 public:
     QxlDod(_In_ DEVICE_OBJECT* pPhysicalDeviceObject);
     ~QxlDod(void);
@@ -219,18 +310,109 @@ public:
     // Must be Non-Paged
     // Write out pixels as part of bugcheck
     VOID SystemDisplayWrite(_In_reads_bytes_(SourceHeight * SourceStride) VOID* pSource,
-                            _In_                                     UINT  SourceWidth,
-                            _In_                                     UINT  SourceHeight,
-                            _In_                                     UINT  SourceStride,
-                            _In_                                     INT   PositionX,
-                            _In_                                     INT   PositionY);
+                                 _In_                                     UINT  SourceWidth,
+                                 _In_                                     UINT  SourceHeight,
+                                 _In_                                     UINT  SourceStride,
+                                 _In_                                     INT   PositionX,
+                                 _In_                                     INT   PositionY);
 private:
     VOID CleanUp(VOID);
     NTSTATUS WriteHWInfoStr(_In_ HANDLE DevInstRegKeyHandle, _In_ PCWSTR pszwValueName, _In_ PCSTR pszValue);
+    // Set the given source mode on the given path
+    NTSTATUS SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMode,
+                                  CONST D3DKMDT_VIDPN_PRESENT_PATH* pPath);
+
+    // Add the current mode to the given monitor source mode set
+    NTSTATUS AddSingleMonitorMode(_In_ CONST DXGKARG_RECOMMENDMONITORMODES* CONST pRecommendMonitorModes);
+
+    // Add the current mode to the given VidPn source mode set
+    NTSTATUS AddSingleSourceMode(_In_ CONST DXGK_VIDPNSOURCEMODESET_INTERFACE* pVidPnSourceModeSetInterface,
+                                 D3DKMDT_HVIDPNSOURCEMODESET hVidPnSourceModeSet,
+                                 D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId);
+
+    // Add the current mode (or the matching to pinned source mode) to the give VidPn target mode set
+    NTSTATUS AddSingleTargetMode(_In_ CONST DXGK_VIDPNTARGETMODESET_INTERFACE* pVidPnTargetModeSetInterface,
+                                 D3DKMDT_HVIDPNTARGETMODESET hVidPnTargetModeSet,
+                                 _In_opt_ CONST D3DKMDT_VIDPN_SOURCE_MODE* pVidPnPinnedSourceModeInfo,
+                                 D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId);
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID FindSourceForTarget(D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId, BOOLEAN DefaultToZero);
+    NTSTATUS IsVidPnSourceModeFieldsValid(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMode) const;
+    NTSTATUS IsVidPnPathFieldsValid(CONST D3DKMDT_VIDPN_PRESENT_PATH* pPath) const;
+
+
     NTSTATUS RegisterHWInfo();
     NTSTATUS VbeGetModeList();
+
+    NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
+                                 _In_ UINT              DstBitPerPixel,
+                                 _In_ BYTE*             SrcAddr,
+                                 _In_ UINT              SrcBytesPerPixel,
+                                 _In_ LONG              SrcPitch,
+                                 _In_ ULONG             NumMoves,
+                                 _In_ D3DKMT_MOVE_RECT* pMoves,
+                                 _In_ ULONG             NumDirtyRects,
+                                 _In_ RECT*             pDirtyRect,
+                                 _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation);
+    BYTE* GetRowStart(_In_ CONST BLT_INFO* pBltInfo, CONST RECT* pRect);
+    VOID GetPitches(_In_ CONST BLT_INFO* pBltInfo, _Out_ LONG* pPixelPitch, _Out_ LONG* pRowPitch);
+    VOID CopyBitsGeneric(
+                                  BLT_INFO* pDst,
+                                  CONST BLT_INFO* pSrc,
+                                  UINT  NumRects,
+                                 _In_reads_(NumRects) CONST RECT *pRects);
+
+    VOID CopyBits32_32(
+                                 BLT_INFO* pDst,
+                                 CONST BLT_INFO* pSrc,
+                                 UINT  NumRects,
+                                 _In_reads_(NumRects) CONST RECT *pRects);
+    VOID BltBits (
+                                 BLT_INFO* pDst,
+                                 CONST BLT_INFO* pSrc,
+                                 UINT  NumRects,
+                                 _In_reads_(NumRects) CONST RECT *pRects);
+    VOID BlackOutScreen(D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId);
+
     NTSTATUS VbeQueryCurrentMode(PVIDEO_MODE RequestedMode);
-    NTSTATUS VbeSetCurrentMode(PVIDEO_MODE RequestedMode);
+    NTSTATUS VbeSetCurrentMode(ULONG Mode);
+    NTSTATUS VbeGetCurrentMode(ULONG* Mode);
     NTSTATUS VbeSetPowerState(POWER_ACTION ActionType);
+    UINT BPPFromPixelFormat(D3DDDIFORMAT Format) const
+    {
+        switch (Format)
+        {
+            case D3DDDIFMT_UNKNOWN: return 0;
+            case D3DDDIFMT_P8: return 8;
+            case D3DDDIFMT_R5G6B5: return 16;
+            case D3DDDIFMT_R8G8B8: return 24;
+            case D3DDDIFMT_X8R8G8B8: // fall through
+            case D3DDDIFMT_A8R8G8B8: return 32;
+            default: QXL_LOG_ASSERTION1("Unknown D3DDDIFORMAT 0x%I64x", Format); return 0;
+        }
+    }
+
+    // Given bits per pixel, return the pixel format at the same bpp
+    D3DDDIFORMAT PixelFormatFromBPP(UINT BPP) const
+    {
+        switch (BPP)
+        {
+            case  8: return D3DDDIFMT_P8;
+            case 16: return D3DDDIFMT_R5G6B5;
+            case 24: return D3DDDIFMT_R8G8B8;
+            case 32: return D3DDDIFMT_X8R8G8B8;
+            default: QXL_LOG_ASSERTION1("A bit per pixel of 0x%I64x is not supported.", BPP); return D3DDDIFMT_UNKNOWN;
+        }
+    }
 };
+
+NTSTATUS
+MapFrameBuffer(
+    _In_                       PHYSICAL_ADDRESS    PhysicalAddress,
+    _In_                       ULONG               Length,
+    _Outptr_result_bytebuffer_(Length) VOID**              VirtualAddress);
+
+NTSTATUS
+UnmapFrameBuffer(
+    _In_reads_bytes_(Length) VOID* VirtualAddress,
+    _In_                ULONG Length);
 

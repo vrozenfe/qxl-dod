@@ -9,7 +9,7 @@
 // Driver Entry point
 //
 
-int nDebugLevel = TRACE_LEVEL_VERBOSE;
+int nDebugLevel = TRACE_LEVEL_INFORMATION;
 
 
 extern "C"
@@ -93,7 +93,7 @@ DodAddDevice(
     _Outptr_ PVOID*  ppDeviceContext)
 {
     PAGED_CODE();
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
     if ((pPhysicalDeviceObject == NULL) ||
         (ppDeviceContext == NULL))
@@ -113,7 +113,7 @@ DodAddDevice(
 
     *ppDeviceContext = pQxl;
 
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
 }
 
@@ -122,7 +122,7 @@ DodRemoveDevice(
     _In_  VOID* pDeviceContext)
 {
     PAGED_CODE();
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(pDeviceContext);
 
@@ -132,7 +132,7 @@ DodRemoveDevice(
         pQxl = NULL;
     }
 
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
 }
 
@@ -146,7 +146,7 @@ DodStartDevice(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(pDeviceContext != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(pDeviceContext);
     return pQxl->StartDevice(pDxgkStartInfo, pDxgkInterface, pNumberOfViews, pNumberOfChildren);
@@ -158,7 +158,7 @@ DodStopDevice(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(pDeviceContext != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(pDeviceContext);
     return pQxl->StopDevice();
@@ -173,7 +173,7 @@ DodDispatchIoRequest(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(pDeviceContext != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(pDeviceContext);
     if (!pQxl->IsDriverActive())
@@ -193,7 +193,7 @@ DodSetPowerState(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(pDeviceContext != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(pDeviceContext);
     if (!pQxl->IsDriverActive())
@@ -215,7 +215,7 @@ DodQueryChildRelations(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(pDeviceContext != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(pDeviceContext);
     return pQxl->QueryChildRelations(pChildRelations, ChildRelationsSize);
@@ -229,7 +229,7 @@ DodQueryChildStatus(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(pDeviceContext != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(pDeviceContext);
     return pQxl->QueryChildStatus(pChildStatus, NonDestructiveOnly);
@@ -243,7 +243,7 @@ DodQueryDeviceDescriptor(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(pDeviceContext != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(pDeviceContext);
     if (!pQxl->IsDriverActive())
@@ -271,7 +271,7 @@ DodQueryAdapterInfo(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(hAdapter != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     return pQxl->QueryAdapterInfo(pQueryAdapterInfo);
@@ -285,7 +285,7 @@ DodSetPointerPosition(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(hAdapter != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
@@ -304,7 +304,7 @@ DodSetPointerShape(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(hAdapter != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
@@ -324,7 +324,7 @@ DodEscape(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(hAdapter != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     return pQxl->Escape(pEscape);
@@ -338,7 +338,7 @@ DodQueryInterface(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(pDeviceContext != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(pDeviceContext);
     return pQxl->QueryInterface(QueryInterface);
@@ -352,7 +352,7 @@ DodPresentDisplayOnly(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(hAdapter != NULL);
-//    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
@@ -372,7 +372,7 @@ DodStopDeviceAndReleasePostDisplayOwnership(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(pDeviceContext != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(pDeviceContext);
     return pQxl->StopDeviceAndReleasePostDisplayOwnership(TargetId, DisplayInfo);
@@ -386,7 +386,7 @@ DodIsSupportedVidPn(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(hAdapter != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
@@ -408,7 +408,7 @@ DodRecommendFunctionalVidPn(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(hAdapter != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
@@ -427,7 +427,7 @@ DodRecommendVidPnTopology(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(hAdapter != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
@@ -446,7 +446,7 @@ DodRecommendMonitorModes(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(hAdapter != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
@@ -465,7 +465,7 @@ DodEnumVidPnCofuncModality(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(hAdapter != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
@@ -484,7 +484,7 @@ DodSetVidPnSourceVisibility(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(hAdapter != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
@@ -503,7 +503,7 @@ DodCommitVidPn(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(hAdapter != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
@@ -522,7 +522,7 @@ DodUpdateActiveVidPnPresentPath(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(hAdapter != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
@@ -541,7 +541,7 @@ DodQueryVidPnHWCapability(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(hAdapter != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
@@ -564,7 +564,7 @@ DodDpcRoutine(
     _In_  VOID* pDeviceContext)
 {
     QXL_ASSERT_CHK(pDeviceContext != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(pDeviceContext);
     if (!pQxl->IsDriverActive())
@@ -573,7 +573,7 @@ DodDpcRoutine(
         return;
     }
     pQxl->DpcRoutine();
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
 BOOLEAN
@@ -582,7 +582,7 @@ DodInterruptRoutine(
     _In_  ULONG MessageNumber)
 {
     QXL_ASSERT_CHK(pDeviceContext != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(pDeviceContext);
     return pQxl->InterruptRoutine(MessageNumber);
@@ -593,7 +593,7 @@ DodResetDevice(
     _In_  VOID* pDeviceContext)
 {
     QXL_ASSERT_CHK(pDeviceContext != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(pDeviceContext);
     pQxl->ResetDevice();
@@ -610,7 +610,7 @@ DodSystemDisplayEnable(
     _Out_ D3DDDIFORMAT* ColorFormat)
 {
     QXL_ASSERT_CHK(pDeviceContext != NULL);
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(pDeviceContext);
     return pQxl->SystemDisplayEnable(TargetId, Flags, Width, Height, ColorFormat);
