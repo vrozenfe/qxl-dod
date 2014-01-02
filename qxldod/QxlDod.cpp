@@ -109,15 +109,6 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
 //        return Status;
 //    }
 
-
-    Status = VbeGetModeList();
-    if (!NT_SUCCESS(Status))
-    {
-        QXL_LOG_ASSERTION1("RegisterHWInfo failed with status 0x%X\n",
-                           Status);
-        return Status;
-    }
-
     // This sample driver only uses the frame buffer of the POST device. DxgkCbAcquirePostDisplayOwnership 
     // gives you the frame buffer address and ensures that no one else is drawing to it. Be sure to give it back!
     Status = m_DxgkInterface.DxgkCbAcquirePostDisplayOwnership(m_DxgkInterface.DeviceHandle, &(m_CurrentModes[0].DispInfo));
@@ -127,8 +118,20 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
         // after a pre-WDDM 1.2 driver. Since we can't draw anything, we should fail to start.
         return STATUS_UNSUCCESSFUL;
     }
-   *pNumberOfViews = MAX_VIEWS;
-   *pNumberOfChildren = MAX_CHILDREN;
+
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s %dx%d ColorFormat = %d, \n", __FUNCTION__, 
+             m_CurrentModes[0].DispInfo.Width, m_CurrentModes[0].DispInfo.Height, m_CurrentModes[0].DispInfo.ColorFormat));
+
+    Status = VbeGetModeList();
+    if (!NT_SUCCESS(Status))
+    {
+        QXL_LOG_ASSERTION1("RegisterHWInfo failed with status 0x%X\n",
+                           Status);
+        return Status;
+    }
+
+    *pNumberOfViews = MAX_VIEWS;
+    *pNumberOfChildren = MAX_CHILDREN;
     m_Flags.DriverStarted = TRUE;
     return STATUS_SUCCESS;
 }
@@ -2471,9 +2474,13 @@ NTSTATUS QxlDod::VbeGetModeList()
 
         VbeModeInfo = m_ModeInfo + SuitableModeCount;
 
-        if (VbeModeInfo->XResolution >= 1024 &&
-            VbeModeInfo->YResolution >= 768 &&
-            VbeModeInfo->BitsPerPixel == 24 &&
+        UINT Height = m_CurrentModes[0].DispInfo.Height;
+        UINT Width = m_CurrentModes[0].DispInfo.Width;
+        UINT BitsPerPixel = BPPFromPixelFormat(m_CurrentModes[0].DispInfo.ColorFormat);
+
+        if (VbeModeInfo->XResolution >= Width &&
+            VbeModeInfo->YResolution >= Height &&
+            VbeModeInfo->BitsPerPixel == BitsPerPixel &&
             VbeModeInfo->PhysBasePtr != 0)
         {
             m_ModeNumbers[SuitableModeCount] = ModeTemp;
