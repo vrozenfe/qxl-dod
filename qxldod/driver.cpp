@@ -659,7 +659,7 @@ void DebugPrintFuncSerial(const char *format, ...)
     }
     if (len)
     {
-        WRITE_PORT_BUFFER_UCHAR(RHEL_DEBUG_PORT, (PUCHAR)buf, len);
+        WRITE_PORT_BUFFER_UCHAR(RHEL_DEBUG_PORT, (PUCHAR)buf, (ULONG)len);
         WRITE_PORT_UCHAR(RHEL_DEBUG_PORT, '\r');
     }
 }

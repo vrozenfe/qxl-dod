@@ -49,13 +49,14 @@ QxlDod::QxlDod(_In_ DEVICE_OBJECT* pPhysicalDeviceObject) : m_pPhysicalDevice(pP
                                                             m_MonitorPowerState(PowerDeviceD0),
                                                             m_AdapterPowerState(PowerDeviceD0)
 {
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
     *((UINT*)&m_Flags) = 0;
     RtlZeroMemory(&m_DxgkInterface, sizeof(m_DxgkInterface));
     RtlZeroMemory(&m_DeviceInfo, sizeof(m_DeviceInfo));
     RtlZeroMemory(m_CurrentModes, sizeof(m_CurrentModes));
     RtlZeroMemory(&m_PointerShape, sizeof(m_PointerShape));
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+	m_pHWDevice = new(PagedPool) VgaDevice(this);
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
 }
 
 
@@ -80,11 +81,11 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
     QXL_ASSERT(pDxgkInterface != NULL);
     QXL_ASSERT(pNumberOfViews != NULL);
     QXL_ASSERT(pNumberOfChildren != NULL);
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
-
+//CHECK ME!!!!!!!!!!!!!
     RtlCopyMemory(&m_DxgkInterface, pDxgkInterface, sizeof(m_DxgkInterface));
     RtlZeroMemory(m_CurrentModes, sizeof(m_CurrentModes));
-    m_CurrentModes[0].DispInfo.TargetId = D3DDDI_ID_UNINITIALIZED;
+//CHECK ME!!!!!!!!!!!!!
+	m_CurrentModes[0].DispInfo.TargetId = D3DDDI_ID_UNINITIALIZED;
     // Get device information from OS.
     NTSTATUS Status = m_DxgkInterface.DxgkCbGetDeviceInformation(m_DxgkInterface.DeviceHandle, &m_DeviceInfo);
     if (!NT_SUCCESS(Status))
@@ -109,15 +110,6 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
 //        return Status;
 //    }
 
-
-    Status = VbeGetModeList();
-    if (!NT_SUCCESS(Status))
-    {
-        QXL_LOG_ASSERTION1("RegisterHWInfo failed with status 0x%X\n",
-                           Status);
-        return Status;
-    }
-
     // This sample driver only uses the frame buffer of the POST device. DxgkCbAcquirePostDisplayOwnership 
     // gives you the frame buffer address and ensures that no one else is drawing to it. Be sure to give it back!
     Status = m_DxgkInterface.DxgkCbAcquirePostDisplayOwnership(m_DxgkInterface.DeviceHandle, &(m_CurrentModes[0].DispInfo));
@@ -127,9 +119,19 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
         // after a pre-WDDM 1.2 driver. Since we can't draw anything, we should fail to start.
         return STATUS_UNSUCCESSFUL;
     }
+
+    Status = m_pHWDevice->GetModeList(&m_CurrentModes[0].DispInfo);
+    if (!NT_SUCCESS(Status))
+    {
+        QXL_LOG_ASSERTION1("RegisterHWInfo failed with status 0x%X\n",
+                           Status);
+        return Status;
+    }
+
    *pNumberOfViews = MAX_VIEWS;
    *pNumberOfChildren = MAX_CHILDREN;
     m_Flags.DriverStarted = TRUE;
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
 }
 
@@ -250,7 +252,7 @@ NTSTATUS QxlDod::SetPowerState(_In_  ULONG HardwareUid,
         return STATUS_SUCCESS;
     }
     // TODO: This is where the specified monitor should be powered up/down
-    VbeSetPowerState(ActionType);
+    m_pHWDevice->SetPowerState(ActionType);
     return STATUS_SUCCESS;
 }
 
@@ -677,10 +679,11 @@ NTSTATUS QxlDod::AddSingleSourceMode(_In_ CONST DXGK_VIDPNSOURCEMODESET_INTERFAC
 
     // There is only one source format supported by display-only drivers, but more can be added in a 
     // full WDDM driver if the hardware supports them
-    for (ULONG idx = 0; idx < m_ModeCount; ++idx)
+    for (ULONG idx = 0; idx < m_pHWDevice->GetModeCount(); ++idx)
     {
         // Create new mode info that will be populated
         D3DKMDT_VIDPN_SOURCE_MODE* pVidPnSourceModeInfo = NULL;
+        PVBE_MODEINFO pModeInfo = m_pHWDevice->GetModeInfo(idx);
         NTSTATUS Status = pVidPnSourceModeSetInterface->pfnCreateNewModeInfo(hVidPnSourceModeSet, &pVidPnSourceModeInfo);
         if (!NT_SUCCESS(Status))
         {
@@ -692,10 +695,10 @@ NTSTATUS QxlDod::AddSingleSourceMode(_In_ CONST DXGK_VIDPNSOURCEMODESET_INTERFAC
         // Populate mode info with values from current mode and hard-coded values
         // Always report 32 bpp format, this will be color converted during the present if the mode is < 32bpp
         pVidPnSourceModeInfo->Type = D3DKMDT_RMT_GRAPHICS;
-        pVidPnSourceModeInfo->Format.Graphics.PrimSurfSize.cx = m_ModeInfo[idx].XResolution;
-        pVidPnSourceModeInfo->Format.Graphics.PrimSurfSize.cy = m_ModeInfo[idx].YResolution;
+        pVidPnSourceModeInfo->Format.Graphics.PrimSurfSize.cx = pModeInfo->XResolution;
+        pVidPnSourceModeInfo->Format.Graphics.PrimSurfSize.cy = pModeInfo->YResolution;
         pVidPnSourceModeInfo->Format.Graphics.VisibleRegionSize = pVidPnSourceModeInfo->Format.Graphics.PrimSurfSize;
-        pVidPnSourceModeInfo->Format.Graphics.Stride = m_ModeInfo[idx].BytesPerScanLine / m_ModeInfo[idx].XResolution;
+        pVidPnSourceModeInfo->Format.Graphics.Stride = pModeInfo->BytesPerScanLine / pModeInfo->XResolution;
         pVidPnSourceModeInfo->Format.Graphics.PixelFormat = D3DDDIFMT_A8R8G8B8;
         pVidPnSourceModeInfo->Format.Graphics.ColorBasis = D3DKMDT_CB_SCRGB;
         pVidPnSourceModeInfo->Format.Graphics.PixelValueAccessMode = D3DKMDT_PVAM_DIRECT;
@@ -733,9 +736,10 @@ NTSTATUS QxlDod::AddSingleTargetMode(_In_ CONST DXGK_VIDPNTARGETMODESET_INTERFAC
 
     D3DKMDT_VIDPN_TARGET_MODE* pVidPnTargetModeInfo = NULL;
     NTSTATUS Status  = STATUS_SUCCESS;
-
-    for (UINT ModeIndex = 0; ModeIndex < m_ModeCount; ++ModeIndex)
+//FIXME !!!!!!
+    for (UINT ModeIndex = 0; ModeIndex < m_pHWDevice->GetModeCount(); ++ModeIndex)
     {
+		PVBE_MODEINFO pModeInfo = m_pHWDevice->GetModeInfo(SourceId);
         pVidPnTargetModeInfo = NULL;
         Status = pVidPnTargetModeSetInterface->pfnCreateNewModeInfo(hVidPnTargetModeSet, &pVidPnTargetModeInfo);
         if (!NT_SUCCESS(Status))
@@ -745,8 +749,8 @@ NTSTATUS QxlDod::AddSingleTargetMode(_In_ CONST DXGK_VIDPNTARGETMODESET_INTERFAC
             return Status;
         }
         pVidPnTargetModeInfo->VideoSignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
-        pVidPnTargetModeInfo->VideoSignalInfo.TotalSize.cx = m_ModeInfo[SourceId].XResolution;
-        pVidPnTargetModeInfo->VideoSignalInfo.TotalSize.cy = m_ModeInfo[SourceId].YResolution;
+        pVidPnTargetModeInfo->VideoSignalInfo.TotalSize.cx = pModeInfo->XResolution;
+        pVidPnTargetModeInfo->VideoSignalInfo.TotalSize.cy = pModeInfo->YResolution;
         pVidPnTargetModeInfo->VideoSignalInfo.ActiveSize = pVidPnTargetModeInfo->VideoSignalInfo.TotalSize;
         pVidPnTargetModeInfo->VideoSignalInfo.VSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
         pVidPnTargetModeInfo->VideoSignalInfo.VSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
@@ -792,7 +796,7 @@ NTSTATUS QxlDod::AddSingleMonitorMode(_In_ CONST DXGKARG_RECOMMENDMONITORMODES* 
         return Status;
     }
 
-    pVbeModeInfo = &m_ModeInfo[m_CurrentMode];
+    pVbeModeInfo = m_pHWDevice->GetModeInfo(m_pHWDevice->GetCurrentModeIndex());//&m_ModeInfo[m_CurrentMode];
 
     // Since we don't know the real monitor timing information, just use the current display mode (from the POST device) with unknown frequencies
     pMonitorSourceMode->VideoSignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
@@ -835,12 +839,12 @@ NTSTATUS QxlDod::AddSingleMonitorMode(_In_ CONST DXGKARG_RECOMMENDMONITORMODES* 
         return Status;
     }
     // If AddMode succeeded with something other than STATUS_SUCCESS treat it as such anyway when propagating up
-    for (UINT Idx = 0; Idx < m_ModeCount; ++Idx)
+    for (UINT Idx = 0; Idx < m_pHWDevice->GetModeCount(); ++Idx)
     {
         // There is only one source format supported by display-only drivers, but more can be added in a 
         // full WDDM driver if the hardware supports them
 
-        pVbeModeInfo = &m_ModeInfo[Idx];
+        pVbeModeInfo = m_pHWDevice->GetModeInfo(Idx);
         // TODO: add routine for filling Monitor modepMonitorSourceMode = NULL;
         Status = pRecommendMonitorModes->pMonitorSourceModeSetInterface->pfnCreateNewModeInfo(pRecommendMonitorModes->hMonitorSourceModeSet, &pMonitorSourceMode);
         if (!NT_SUCCESS(Status))
@@ -1510,15 +1514,16 @@ NTSTATUS QxlDod::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMo
 
         // Mark that the next present should be fullscreen so the screen doesn't go from black to actual pixels one dirty rect at a time.
         pCurrentBddMode->Flags.FullscreenPresent = TRUE;
-        for (USHORT ModeIndex = 0; ModeIndex < m_ModeCount; ++ModeIndex)
+        for (USHORT ModeIndex = 0; ModeIndex < m_pHWDevice->GetModeCount(); ++ModeIndex)
         {
-             if (pCurrentBddMode->DispInfo.Width == m_ModeInfo[ModeIndex].XResolution &&
-                 pCurrentBddMode->DispInfo.Height == m_ModeInfo[ModeIndex].YResolution )
+			PVBE_MODEINFO pModeInfo = m_pHWDevice->GetModeInfo(m_pHWDevice->GetCurrentModeIndex());
+             if (pCurrentBddMode->DispInfo.Width == pModeInfo->XResolution &&
+                 pCurrentBddMode->DispInfo.Height == pModeInfo->YResolution )
              {
-                 Status = VbeSetCurrentMode(m_ModeNumbers[ModeIndex]);
+                 Status = m_pHWDevice->SetCurrentMode(m_pHWDevice->GetModeNumber(ModeIndex));
                  if (NT_SUCCESS(Status))
                  {
-                     m_CurrentMode = ModeIndex;
+                     m_pHWDevice->SetCurrentModeIndex(ModeIndex);
                  }
                  break;
              }
@@ -2286,7 +2291,7 @@ VOID QxlDod::CopyBits32_32(
     NT_ASSERT((pDst->Rotation == D3DKMDT_VPPR_IDENTITY) &&
               (pSrc->Rotation == D3DKMDT_VPPR_IDENTITY));
 
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
     for (UINT iRect = 0; iRect < NumRects; iRect++)
     {
@@ -2348,8 +2353,104 @@ VOID QxlDod::BltBits (
     }
 }
 
+//
+// Non-Paged Code
+//
+#pragma code_seg(push)
+#pragma code_seg()
+D3DDDI_VIDEO_PRESENT_SOURCE_ID QxlDod::FindSourceForTarget(D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId, BOOLEAN DefaultToZero)
+{
+    UNREFERENCED_PARAMETER(TargetId);
+    for (UINT SourceId = 0; SourceId < MAX_VIEWS; ++SourceId)
+    {
+        if (m_CurrentModes[SourceId].FrameBuffer.Ptr != NULL)
+        {
+            return SourceId;
+        }
+    }
 
-NTSTATUS QxlDod::VbeGetModeList()
+    return DefaultToZero ? 0 : D3DDDI_ID_UNINITIALIZED;
+}
+
+#pragma code_seg(pop) // End Non-Paged Code
+
+//
+// Frame buffer map/unmap
+//
+
+NTSTATUS
+MapFrameBuffer(
+    _In_                       PHYSICAL_ADDRESS    PhysicalAddress,
+    _In_                       ULONG               Length,
+    _Outptr_result_bytebuffer_(Length) VOID**              VirtualAddress)
+{
+    PAGED_CODE();
+
+    //
+    // Check for parameters
+    //
+    if ((PhysicalAddress.QuadPart == (ULONGLONG)0) ||
+        (Length == 0) ||
+        (VirtualAddress == NULL))
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("One of PhysicalAddress.QuadPart (0x%I64x), Length (0x%I64x), VirtualAddress (0x%I64x) is NULL or 0",
+                        PhysicalAddress.QuadPart, Length, VirtualAddress));
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    *VirtualAddress = MmMapIoSpace(PhysicalAddress,
+                                   Length,
+                                   MmWriteCombined);
+    if (*VirtualAddress == NULL)
+    {
+        // The underlying call to MmMapIoSpace failed. This may be because, MmWriteCombined
+        // isn't supported, so try again with MmNonCached
+
+        *VirtualAddress = MmMapIoSpace(PhysicalAddress,
+                                       Length,
+                                       MmNonCached);
+        if (*VirtualAddress == NULL)
+        {
+            DbgPrint(TRACE_LEVEL_ERROR, ("MmMapIoSpace returned a NULL buffer when trying to allocate 0x%I64x bytes", Length));
+            return STATUS_NO_MEMORY;
+        }
+    }
+
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+UnmapFrameBuffer(
+    _In_reads_bytes_(Length) VOID* VirtualAddress,
+    _In_                ULONG Length)
+{
+    PAGED_CODE();
+
+
+    //
+    // Check for parameters
+    //
+    if ((VirtualAddress == NULL) && (Length == 0))
+    {
+        // Allow this function to be called when there's no work to do, and treat as successful
+        return STATUS_SUCCESS;
+    }
+    else if ((VirtualAddress == NULL) || (Length == 0))
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("Only one of Length (0x%I64x), VirtualAddress (0x%I64x) is NULL or 0",
+                        Length, VirtualAddress));
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    MmUnmapIoSpace(VirtualAddress,
+                   Length);
+
+    return STATUS_SUCCESS;
+}
+
+// HW specific code
+
+NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
     PAGED_CODE();
     USHORT m_Segment;
@@ -2470,10 +2571,13 @@ NTSTATUS QxlDod::VbeGetModeList()
                     sizeof(VBE_MODEINFO));
 
         VbeModeInfo = m_ModeInfo + SuitableModeCount;
-
-        if (VbeModeInfo->XResolution >= 1024 &&
-            VbeModeInfo->YResolution >= 768 &&
-            VbeModeInfo->BitsPerPixel == 24 &&
+        UINT Height = pDispInfo->Height;
+        UINT Width = pDispInfo->Width;
+        UINT BitsPerPixel = BPPFromPixelFormat(pDispInfo->ColorFormat);
+        
+        if (VbeModeInfo->XResolution >= Width &&
+            VbeModeInfo->YResolution >= Height &&
+            VbeModeInfo->BitsPerPixel == BitsPerPixel &&
             VbeModeInfo->PhysBasePtr != 0)
         {
             m_ModeNumbers[SuitableModeCount] = ModeTemp;
@@ -2496,7 +2600,11 @@ NTSTATUS QxlDod::VbeGetModeList()
     DbgPrint(TRACE_LEVEL_ERROR, ("ModeCount filtered %d\n", m_ModeCount));
     for (ULONG idx = 0; idx < m_ModeCount; idx++)
     {
-        DbgPrint(TRACE_LEVEL_ERROR, ("type %x, XRes = %d, YRes = %d, BPP = %d\n", m_ModeNumbers[idx], m_ModeInfo[idx].XResolution,  m_ModeInfo[idx].YResolution,  m_ModeInfo[idx].BitsPerPixel));
+        DbgPrint(TRACE_LEVEL_ERROR, ("type %x, XRes = %d, YRes = %d, BPP = %d\n",
+                                    m_ModeNumbers[idx],
+                                    m_ModeInfo[idx].XResolution,
+                                    m_ModeInfo[idx].YResolution,
+                                    m_ModeInfo[idx].BitsPerPixel));
     }
 
     if (m_Segment != 0)
@@ -2507,7 +2615,7 @@ NTSTATUS QxlDod::VbeGetModeList()
     return Status;
 }
 
-NTSTATUS QxlDod::VbeQueryCurrentMode(PVIDEO_MODE RequestedMode)
+NTSTATUS VgaDevice::QueryCurrentMode(PVIDEO_MODE RequestedMode)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     NTSTATUS Status = STATUS_SUCCESS;
@@ -2517,7 +2625,7 @@ NTSTATUS QxlDod::VbeQueryCurrentMode(PVIDEO_MODE RequestedMode)
     return Status;
 }
 
-NTSTATUS QxlDod::VbeSetCurrentMode(ULONG Mode)
+NTSTATUS VgaDevice::SetCurrentMode(ULONG Mode)
 {
     NTSTATUS Status = STATUS_SUCCESS;
     DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s Mode = %x\n", __FUNCTION__, Mode));
@@ -2533,7 +2641,7 @@ NTSTATUS QxlDod::VbeSetCurrentMode(ULONG Mode)
     return Status;
 }
 
-NTSTATUS QxlDod::VbeGetCurrentMode(ULONG* pMode)
+NTSTATUS VgaDevice::GetCurrentMode(ULONG* pMode)
 {
     NTSTATUS Status = STATUS_SUCCESS;
     DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
@@ -2549,7 +2657,7 @@ NTSTATUS QxlDod::VbeGetCurrentMode(ULONG* pMode)
     return Status;
 }
 
-NTSTATUS QxlDod::VbeSetPowerState(POWER_ACTION ActionType)
+NTSTATUS VgaDevice::SetPowerState(POWER_ACTION ActionType)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
@@ -2574,98 +2682,52 @@ NTSTATUS QxlDod::VbeSetPowerState(POWER_ACTION ActionType)
     return STATUS_SUCCESS;
 }
 
-//
-// Non-Paged Code
-//
-#pragma code_seg(push)
-#pragma code_seg()
-D3DDDI_VIDEO_PRESENT_SOURCE_ID QxlDod::FindSourceForTarget(D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId, BOOLEAN DefaultToZero)
-{
-    UNREFERENCED_PARAMETER(TargetId);
-    for (UINT SourceId = 0; SourceId < MAX_VIEWS; ++SourceId)
-    {
-        if (m_CurrentModes[SourceId].FrameBuffer.Ptr != NULL)
-        {
-            return SourceId;
-        }
-    }
 
-    return DefaultToZero ? 0 : D3DDDI_ID_UNINITIALIZED;
-}
-
-#pragma code_seg(pop) // End Non-Paged Code
-
-//
-// Frame buffer map/unmap
-//
-
-NTSTATUS
-MapFrameBuffer(
-    _In_                       PHYSICAL_ADDRESS    PhysicalAddress,
-    _In_                       ULONG               Length,
-    _Outptr_result_bytebuffer_(Length) VOID**              VirtualAddress)
+NTSTATUS QxlDevice::GetModeList()
 {
     PAGED_CODE();
-
-    //
-    // Check for parameters
-    //
-    if ((PhysicalAddress.QuadPart == (ULONGLONG)0) ||
-        (Length == 0) ||
-        (VirtualAddress == NULL))
+    NTSTATUS Status = STATUS_SUCCESS;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    if (!NT_SUCCESS (Status))
     {
-        DbgPrint(TRACE_LEVEL_ERROR, ("One of PhysicalAddress.QuadPart (0x%I64x), Length (0x%I64x), VirtualAddress (0x%I64x) is NULL or 0",
-                        PhysicalAddress.QuadPart, Length, VirtualAddress));
-        return STATUS_INVALID_PARAMETER;
+        DbgPrint(TRACE_LEVEL_ERROR, ("x86BiosWriteMemory failed with Status: 0x%X\n", Status));
+        return Status;
     }
-
-    *VirtualAddress = MmMapIoSpace(PhysicalAddress,
-                                   Length,
-                                   MmWriteCombined);
-    if (*VirtualAddress == NULL)
-    {
-        // The underlying call to MmMapIoSpace failed. This may be because, MmWriteCombined
-        // isn't supported, so try again with MmNonCached
-
-        *VirtualAddress = MmMapIoSpace(PhysicalAddress,
-                                       Length,
-                                       MmNonCached);
-        if (*VirtualAddress == NULL)
-        {
-            DbgPrint(TRACE_LEVEL_ERROR, ("MmMapIoSpace returned a NULL buffer when trying to allocate 0x%I64x bytes", Length));
-            return STATUS_NO_MEMORY;
-        }
-    }
-
-    return STATUS_SUCCESS;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+    return Status;
 }
 
-NTSTATUS
-UnmapFrameBuffer(
-    _In_reads_bytes_(Length) VOID* VirtualAddress,
-    _In_                ULONG Length)
+NTSTATUS QxlDevice::QueryCurrentMode(PVIDEO_MODE RequestedMode)
 {
-    PAGED_CODE();
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+    NTSTATUS Status = STATUS_SUCCESS;
+    UNREFERENCED_PARAMETER(RequestedMode);
+    return Status;
+}
 
+NTSTATUS QxlDevice::SetCurrentMode(ULONG Mode)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s Mode = %x\n", __FUNCTION__, Mode));
+    UNREFERENCED_PARAMETER(Mode);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+    return Status;
+}
 
-    //
-    // Check for parameters
-    //
-    if ((VirtualAddress == NULL) && (Length == 0))
-    {
-        // Allow this function to be called when there's no work to do, and treat as successful
-        return STATUS_SUCCESS;
-    }
-    else if ((VirtualAddress == NULL) || (Length == 0))
-    {
-        DbgPrint(TRACE_LEVEL_ERROR, ("Only one of Length (0x%I64x), VirtualAddress (0x%I64x) is NULL or 0",
-                        Length, VirtualAddress));
-        return STATUS_INVALID_PARAMETER;
-    }
+NTSTATUS QxlDevice::GetCurrentMode(ULONG* pMode)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
+    UNREFERENCED_PARAMETER(pMode);
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
+    return Status;
+}
 
-    MmUnmapIoSpace(VirtualAddress,
-                   Length);
-
+NTSTATUS QxlDevice::SetPowerState(POWER_ACTION ActionType)
+{
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    UNREFERENCED_PARAMETER(ActionType);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
 }
 

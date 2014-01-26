@@ -24,7 +24,6 @@ typedef struct _QXL_FLAGS
 #define SHIFT_MIDDLE_6_IN_565_BACK ((BITS_PER_BYTE * 1) + (BITS_PER_BYTE - 6))
 #define SHIFT_LOWER_5_IN_565_BACK  ((BITS_PER_BYTE * 0) + (BITS_PER_BYTE - 5))
 
-
 #pragma pack(push)
 #pragma pack(1)
 
@@ -204,6 +203,57 @@ typedef struct _CURRENT_BDD_MODE
     } FrameBuffer;
 } CURRENT_BDD_MODE;
 
+class QxlDod;
+ 
+class HwDeviceIntrface :
+    public BaseObject
+{
+public:
+//    HwDeviceIntrface(_In_ QxlDod* pQxlDod);
+//    virtual ~HwDeviceIntrface(void);
+    virtual NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
+    virtual NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode) = 0;
+    virtual NTSTATUS SetCurrentMode(ULONG Mode) = 0;
+    virtual NTSTATUS GetCurrentMode(ULONG* Mode) = 0;
+    virtual NTSTATUS SetPowerState(POWER_ACTION ActionType) = 0;
+    ULONG GetModeCount(void) {return m_ModeCount;}
+    PVBE_MODEINFO GetModeInfo(UINT idx) {return &m_ModeInfo[idx];}
+    USHORT GetModeNumber(USHORT idx) {return m_ModeNumbers[idx];}
+    USHORT GetCurrentModeIndex(void) {return m_CurrentMode;}
+    VOID SetCurrentModeIndex(USHORT idx) {m_CurrentMode = idx;}
+protected:
+    QxlDod* m_pQxlDod;
+    PVBE_MODEINFO m_ModeInfo;
+    ULONG m_ModeCount;
+    PUSHORT m_ModeNumbers;
+    USHORT m_CurrentMode;
+};
+
+class VgaDevice  :
+    public HwDeviceIntrface
+{
+public:
+    VgaDevice(_In_ QxlDod* pQxlDod){m_pQxlDod = pQxlDod;}
+    virtual ~VgaDevice(void){;}
+    NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
+    NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode);
+    NTSTATUS SetCurrentMode(ULONG Mode);
+    NTSTATUS GetCurrentMode(ULONG* Mode);
+    NTSTATUS SetPowerState(POWER_ACTION ActionType);
+};
+
+class QxlDevice  :
+    public HwDeviceIntrface
+{
+public:
+    QxlDevice(_In_ QxlDod* pQxlDod){m_pQxlDod = pQxlDod;}
+    virtual ~QxlDevice(void){;}
+    NTSTATUS GetModeList(void);
+    NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode);
+    NTSTATUS SetCurrentMode(ULONG Mode);
+    NTSTATUS GetCurrentMode(ULONG* Mode);
+    NTSTATUS SetPowerState(POWER_ACTION ActionType);
+};
 
 class QxlDod :
     public BaseObject
@@ -216,13 +266,12 @@ private:
     DEVICE_POWER_STATE m_MonitorPowerState;
     DEVICE_POWER_STATE m_AdapterPowerState;
     QXL_FLAGS m_Flags;
-    PVBE_MODEINFO m_ModeInfo;
-    ULONG m_ModeCount;
-    PUSHORT m_ModeNumbers;
-    USHORT m_CurrentMode;
+
     CURRENT_BDD_MODE m_CurrentModes[MAX_VIEWS];
+
     D3DDDI_VIDEO_PRESENT_SOURCE_ID m_SystemDisplaySourceId;
     DXGKARG_SETPOINTERSHAPE m_PointerShape;
+	HwDeviceIntrface* m_pHWDevice;
 public:
     QxlDod(_In_ DEVICE_OBJECT* pPhysicalDeviceObject);
     ~QxlDod(void);
@@ -341,7 +390,6 @@ private:
 
 
     NTSTATUS RegisterHWInfo();
-    NTSTATUS VbeGetModeList();
 
     NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
                                  _In_ UINT              DstBitPerPixel,
@@ -372,37 +420,6 @@ private:
                                  UINT  NumRects,
                                  _In_reads_(NumRects) CONST RECT *pRects);
     VOID BlackOutScreen(D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId);
-
-    NTSTATUS VbeQueryCurrentMode(PVIDEO_MODE RequestedMode);
-    NTSTATUS VbeSetCurrentMode(ULONG Mode);
-    NTSTATUS VbeGetCurrentMode(ULONG* Mode);
-    NTSTATUS VbeSetPowerState(POWER_ACTION ActionType);
-    UINT BPPFromPixelFormat(D3DDDIFORMAT Format) const
-    {
-        switch (Format)
-        {
-            case D3DDDIFMT_UNKNOWN: return 0;
-            case D3DDDIFMT_P8: return 8;
-            case D3DDDIFMT_R5G6B5: return 16;
-            case D3DDDIFMT_R8G8B8: return 24;
-            case D3DDDIFMT_X8R8G8B8: // fall through
-            case D3DDDIFMT_A8R8G8B8: return 32;
-            default: QXL_LOG_ASSERTION1("Unknown D3DDDIFORMAT 0x%I64x", Format); return 0;
-        }
-    }
-
-    // Given bits per pixel, return the pixel format at the same bpp
-    D3DDDIFORMAT PixelFormatFromBPP(UINT BPP) const
-    {
-        switch (BPP)
-        {
-            case  8: return D3DDDIFMT_P8;
-            case 16: return D3DDDIFMT_R5G6B5;
-            case 24: return D3DDDIFMT_R8G8B8;
-            case 32: return D3DDDIFMT_X8R8G8B8;
-            default: QXL_LOG_ASSERTION1("A bit per pixel of 0x%I64x is not supported.", BPP); return D3DDDIFMT_UNKNOWN;
-        }
-    }
 };
 
 NTSTATUS
@@ -416,3 +433,30 @@ UnmapFrameBuffer(
     _In_reads_bytes_(Length) VOID* VirtualAddress,
     _In_                ULONG Length);
 
+
+UINT BPPFromPixelFormat(D3DDDIFORMAT Format)
+{
+    switch (Format)
+    {
+        case D3DDDIFMT_UNKNOWN: return 0;
+        case D3DDDIFMT_P8: return 8;
+        case D3DDDIFMT_R5G6B5: return 16;
+        case D3DDDIFMT_R8G8B8: return 24;
+        case D3DDDIFMT_X8R8G8B8: // fall through
+        case D3DDDIFMT_A8R8G8B8: return 32;
+        default: QXL_LOG_ASSERTION1("Unknown D3DDDIFORMAT 0x%I64x", Format); return 0;
+    }
+}
+
+// Given bits per pixel, return the pixel format at the same bpp
+D3DDDIFORMAT PixelFormatFromBPP(UINT BPP)
+{
+    switch (BPP)
+    {
+        case  8: return D3DDDIFMT_P8;
+        case 16: return D3DDDIFMT_R5G6B5;
+        case 24: return D3DDDIFMT_R8G8B8;
+        case 32: return D3DDDIFMT_X8R8G8B8;
+        default: QXL_LOG_ASSERTION1("A bit per pixel of 0x%I64x is not supported.", BPP); return D3DDDIFMT_UNKNOWN;
+    }
+}
