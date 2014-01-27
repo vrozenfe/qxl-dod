@@ -55,7 +55,7 @@ QxlDod::QxlDod(_In_ DEVICE_OBJECT* pPhysicalDeviceObject) : m_pPhysicalDevice(pP
     RtlZeroMemory(&m_DeviceInfo, sizeof(m_DeviceInfo));
     RtlZeroMemory(m_CurrentModes, sizeof(m_CurrentModes));
     RtlZeroMemory(&m_PointerShape, sizeof(m_PointerShape));
-	m_pHWDevice = new(PagedPool) VgaDevice(this);
+    m_pHWDevice = new(PagedPool) VgaDevice(this);
     DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
 }
 
@@ -64,8 +64,8 @@ QxlDod::~QxlDod(void)
 {
     PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
-
     CleanUp();
+    delete m_pHWDevice;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
@@ -120,10 +120,18 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
         return STATUS_UNSUCCESSFUL;
     }
 
+    Status = m_pHWDevice->HWInit(m_DeviceInfo.TranslatedResourceList);
+    if (!NT_SUCCESS(Status))
+    {
+        QXL_LOG_ASSERTION1("HWInit failed with status 0x%X\n",
+                           Status);
+        return Status;
+    }
+
     Status = m_pHWDevice->GetModeList(&m_CurrentModes[0].DispInfo);
     if (!NT_SUCCESS(Status))
     {
-        QXL_LOG_ASSERTION1("RegisterHWInfo failed with status 0x%X\n",
+        QXL_LOG_ASSERTION1("GetModeList failed with status 0x%X\n",
                            Status);
         return Status;
     }
@@ -2450,6 +2458,25 @@ UnmapFrameBuffer(
 
 // HW specific code
 
+VgaDevice::VgaDevice(_In_ QxlDod* pQxlDod)
+{
+    m_pQxlDod = pQxlDod;
+    m_ModeInfo = NULL;
+    m_ModeCount = 0;
+    m_ModeNumbers = NULL;
+    m_CurrentMode = 0;
+}
+
+VgaDevice::~VgaDevice(void)
+{
+    delete [] reinterpret_cast<BYTE*>(m_ModeInfo);
+    delete [] reinterpret_cast<BYTE*>(m_ModeNumbers);
+    m_ModeInfo = NULL;
+    m_ModeNumbers = NULL;
+    m_CurrentMode = 0;
+    m_ModeCount = 0;
+}
+
 NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
     PAGED_CODE();
@@ -2574,7 +2601,7 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
         UINT Height = pDispInfo->Height;
         UINT Width = pDispInfo->Width;
         UINT BitsPerPixel = BPPFromPixelFormat(pDispInfo->ColorFormat);
-        
+
         if (VbeModeInfo->XResolution >= Width &&
             VbeModeInfo->YResolution >= Height &&
             VbeModeInfo->BitsPerPixel == BitsPerPixel &&
@@ -2657,6 +2684,14 @@ NTSTATUS VgaDevice::GetCurrentMode(ULONG* pMode)
     return Status;
 }
 
+NTSTATUS VgaDevice::HWInit(PCM_RESOURCE_LIST pResList)
+{
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    UNREFERENCED_PARAMETER(pResList);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS VgaDevice::SetPowerState(POWER_ACTION ActionType)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
@@ -2731,3 +2766,186 @@ NTSTATUS QxlDevice::SetPowerState(POWER_ACTION ActionType)
     return STATUS_SUCCESS;
 }
 
+NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList)
+{
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    PDXGKRNL_INTERFACE pDxgkInterface = m_pQxlDod->GetDxgkInterrface();
+    UINT pci_range = QXL_RAM_RANGE_INDEX;
+    for (ULONG i = 0; i < pResList->Count; ++i)
+    {
+        PCM_FULL_RESOURCE_DESCRIPTOR pFullResDescriptor = &pResList->List[i];
+        for (ULONG j = 0; j < pFullResDescriptor->PartialResourceList.Count; ++j)
+        {
+           PCM_PARTIAL_RESOURCE_DESCRIPTOR pResDescriptor = &pFullResDescriptor->PartialResourceList.PartialDescriptors[j];
+           switch (pResDescriptor->Type)
+           {
+              case CmResourceTypePort:
+              {
+                   PVOID IoBase = NULL;
+                   ULONG IoLength = pResDescriptor->u.Port.Length;
+                   NTSTATUS Status = STATUS_SUCCESS;
+                   DbgPrint(TRACE_LEVEL_INFORMATION, ("IO Port Info  [%08I64X-%08I64X]\n",
+                                 pResDescriptor->u.Port.Start.QuadPart,
+                                 pResDescriptor->u.Port.Start.QuadPart +
+                                 pResDescriptor->u.Port.Length));
+                   m_IoMapped = (pResDescriptor->Flags & CM_RESOURCE_PORT_IO) ? FALSE : TRUE;
+                   if(m_IoMapped)
+                   {
+                         Status = pDxgkInterface->DxgkCbMapMemory(pDxgkInterface->DeviceHandle,
+                                 pResDescriptor->u.Port.Start,
+                                 IoLength,
+                                 TRUE, /* IN BOOLEAN InIoSpace */
+                                 FALSE, /* IN BOOLEAN MapToUserMode */
+                                 MmNonCached, /* IN MEMORY_CACHING_TYPE CacheType */
+                                 &IoBase /*OUT PVOID *VirtualAddress*/
+                                 );
+                         if (Status == STATUS_SUCCESS)
+                         {
+                             m_IoBase = (PUCHAR)IoBase;
+                             m_IoSize = IoLength;
+                         }
+                         else
+                         {
+                               DbgPrint(TRACE_LEVEL_INFORMATION, ("DxgkCbMapMemor failed with status 0x%X\n", Status));
+                         }
+                   }
+                   else
+                   {
+                       m_IoBase = (PUCHAR)(ULONG_PTR)pResDescriptor->u.Port.Start.QuadPart;
+                       m_IoSize = pResDescriptor->u.Port.Length;
+                   }
+                   DbgPrint(TRACE_LEVEL_INFORMATION, ("io_base  [%X-%X]\n",
+                                 m_IoBase,
+                                 m_IoBase +
+                                 m_IoSize));
+
+              }
+                   break;
+              case CmResourceTypeInterrupt:
+                   DbgPrint(TRACE_LEVEL_VERBOSE, ("Interrupt level: 0x%0x, Vector: 0x%0x\n",
+                                 pResDescriptor->u.Interrupt.Level,
+                                 pResDescriptor->u.Interrupt.Vector));
+                   break;
+              case CmResourceTypeMemory:
+              {
+                    PVOID MemBase = NULL;
+                    ULONG MemLength = pResDescriptor->u.Memory.Length;
+                    NTSTATUS Status = STATUS_SUCCESS;
+                    DbgPrint( TRACE_LEVEL_INFORMATION, ("Memory mapped: (%x:%x) Length:(%x)\n",
+                                 pResDescriptor->u.Memory.Start.LowPart,
+                                 pResDescriptor->u.Memory.Start.HighPart,
+                                 pResDescriptor->u.Memory.Length));
+                    Status = pDxgkInterface->DxgkCbMapMemory(pDxgkInterface->DeviceHandle,
+                                 pResDescriptor->u.Memory.Start,
+                                 MemLength,
+                                 FALSE, /* IN BOOLEAN InIoSpace */
+                                 FALSE, /* IN BOOLEAN MapToUserMode */
+                                 MmNonCached, /* IN MEMORY_CACHING_TYPE CacheType */
+                                 &MemBase /*OUT PVOID *VirtualAddress*/
+                                 );
+                    if (Status == STATUS_SUCCESS)
+                    {
+                        switch (pci_range)
+                        {
+                        case QXL_RAM_RANGE_INDEX:
+                            m_RamPA = pResDescriptor->u.Memory.Start;
+                            m_RamStart = (UINT8*)MemBase;
+                            m_RamSize = MemLength;
+                            pci_range = QXL_VRAM_RANGE_INDEX;
+                            break;
+                        case QXL_VRAM_RANGE_INDEX:
+                            m_VRamPA = pResDescriptor->u.Memory.Start;
+                            m_VRamStart = (UINT8*)MemBase;
+                            m_VRamSize = MemLength;
+                            pci_range = QXL_ROM_RANGE_INDEX;
+                            break;
+                        case QXL_ROM_RANGE_INDEX:
+                            m_RomHdr = (QXLRom*)MemBase;
+                            m_RomSize = MemLength;
+                            pci_range = QXL_PCI_RANGES;
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+              }
+                   break;
+              case CmResourceTypeDma:
+                   DbgPrint( TRACE_LEVEL_INFORMATION, ("Dma\n"));
+                   break;
+              case CmResourceTypeDeviceSpecific:
+                   DbgPrint( TRACE_LEVEL_INFORMATION, ("Device Specific\n"));
+                   break;
+              case CmResourceTypeBusNumber:
+                   DbgPrint( TRACE_LEVEL_INFORMATION, ("Bus number\n"));
+                   break;
+              default:
+                   break;
+           }
+        }
+    }
+    if (m_IoBase == NULL || m_IoSize == 0 ||
+        m_RomHdr == NULL || m_RomSize == 0 ||
+        m_RamStart == NULL || m_RamSize == 0 ||
+        m_VRamStart == NULL || m_VRamSize == 0)
+    {
+        UnmapMemory();
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+    return STATUS_SUCCESS;
+}
+
+void QxlDevice::UnmapMemory(void)
+{
+    PDXGKRNL_INTERFACE pDxgkInterface = m_pQxlDod->GetDxgkInterrface();
+    if (m_IoMapped && m_IoBase)
+    {
+        pDxgkInterface->DxgkCbUnmapMemory( pDxgkInterface->DeviceHandle, &m_IoBase);
+    }
+    m_IoBase = NULL;
+    if (m_RomHdr)
+    {
+        pDxgkInterface->DxgkCbUnmapMemory( pDxgkInterface->DeviceHandle, &m_RomHdr);
+        m_RomHdr = NULL;
+    }
+
+    if (m_RamStart)
+    {
+        pDxgkInterface->DxgkCbUnmapMemory( pDxgkInterface->DeviceHandle, &m_RamStart);
+        m_RamStart = NULL;
+    }
+
+    if (m_VRamStart)
+    {
+        pDxgkInterface->DxgkCbUnmapMemory( pDxgkInterface->DeviceHandle, &m_VRamStart);
+        m_VRamStart = NULL;
+    }
+}
+UINT BPPFromPixelFormat(D3DDDIFORMAT Format)
+{
+    switch (Format)
+    {
+        case D3DDDIFMT_UNKNOWN: return 0;
+        case D3DDDIFMT_P8: return 8;
+        case D3DDDIFMT_R5G6B5: return 16;
+        case D3DDDIFMT_R8G8B8: return 24;
+        case D3DDDIFMT_X8R8G8B8: // fall through
+        case D3DDDIFMT_A8R8G8B8: return 32;
+        default: QXL_LOG_ASSERTION1("Unknown D3DDDIFORMAT 0x%I64x", Format); return 0;
+    }
+}
+
+// Given bits per pixel, return the pixel format at the same bpp
+D3DDDIFORMAT PixelFormatFromBPP(UINT BPP)
+{
+    switch (BPP)
+    {
+        case  8: return D3DDDIFMT_P8;
+        case 16: return D3DDDIFMT_R5G6B5;
+        case 24: return D3DDDIFMT_R8G8B8;
+        case 32: return D3DDDIFMT_X8R8G8B8;
+        default: QXL_LOG_ASSERTION1("A bit per pixel of 0x%I64x is not supported.", BPP); return D3DDDIFMT_UNKNOWN;
+    }
+}

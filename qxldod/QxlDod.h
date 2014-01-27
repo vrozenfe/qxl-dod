@@ -1,5 +1,6 @@
 #pragma once
 #include "baseobject.h"
+#include "qxl_dev.h"
 
 #define MAX_CHILDREN               1
 #define MAX_VIEWS                  1
@@ -216,6 +217,7 @@ public:
     virtual NTSTATUS SetCurrentMode(ULONG Mode) = 0;
     virtual NTSTATUS GetCurrentMode(ULONG* Mode) = 0;
     virtual NTSTATUS SetPowerState(POWER_ACTION ActionType) = 0;
+    virtual NTSTATUS HWInit(PCM_RESOURCE_LIST pResList) = 0;
     ULONG GetModeCount(void) {return m_ModeCount;}
     PVBE_MODEINFO GetModeInfo(UINT idx) {return &m_ModeInfo[idx];}
     USHORT GetModeNumber(USHORT idx) {return m_ModeNumbers[idx];}
@@ -233,13 +235,14 @@ class VgaDevice  :
     public HwDeviceIntrface
 {
 public:
-    VgaDevice(_In_ QxlDod* pQxlDod){m_pQxlDod = pQxlDod;}
-    virtual ~VgaDevice(void){;}
+    VgaDevice(_In_ QxlDod* pQxlDod);
+    virtual ~VgaDevice(void);
     NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode);
     NTSTATUS SetCurrentMode(ULONG Mode);
     NTSTATUS GetCurrentMode(ULONG* Mode);
     NTSTATUS SetPowerState(POWER_ACTION ActionType);
+    NTSTATUS HWInit(PCM_RESOURCE_LIST pResList);
 };
 
 class QxlDevice  :
@@ -253,6 +256,25 @@ public:
     NTSTATUS SetCurrentMode(ULONG Mode);
     NTSTATUS GetCurrentMode(ULONG* Mode);
     NTSTATUS SetPowerState(POWER_ACTION ActionType);
+    NTSTATUS HWInit(PCM_RESOURCE_LIST pResList);
+private:
+    void UnmapMemory(void);
+private:
+    PUCHAR m_IoBase;
+    BOOLEAN m_IoMapped;
+    ULONG m_IoSize;
+
+    PHYSICAL_ADDRESS m_RamPA;
+    UINT8 *m_RamStart;
+    QXLRam *m_RamHdr;
+    ULONG m_RamSize;
+
+    PHYSICAL_ADDRESS m_VRamPA;
+    UINT8 *m_VRamStart;
+    ULONG m_VRamSize;
+
+    QXLRom *m_RomHdr;
+    ULONG m_RomSize;
 };
 
 class QxlDod :
@@ -271,7 +293,7 @@ private:
 
     D3DDDI_VIDEO_PRESENT_SOURCE_ID m_SystemDisplaySourceId;
     DXGKARG_SETPOINTERSHAPE m_PointerShape;
-	HwDeviceIntrface* m_pHWDevice;
+    HwDeviceIntrface* m_pHWDevice;
 public:
     QxlDod(_In_ DEVICE_OBJECT* pPhysicalDeviceObject);
     ~QxlDod(void);
@@ -364,6 +386,7 @@ public:
                                  _In_                                     UINT  SourceStride,
                                  _In_                                     INT   PositionX,
                                  _In_                                     INT   PositionY);
+    PDXGKRNL_INTERFACE GetDxgkInterrface(void) { return &m_DxgkInterface;}
 private:
     VOID CleanUp(VOID);
     NTSTATUS WriteHWInfoStr(_In_ HANDLE DevInstRegKeyHandle, _In_ PCWSTR pszwValueName, _In_ PCSTR pszValue);
@@ -434,29 +457,5 @@ UnmapFrameBuffer(
     _In_                ULONG Length);
 
 
-UINT BPPFromPixelFormat(D3DDDIFORMAT Format)
-{
-    switch (Format)
-    {
-        case D3DDDIFMT_UNKNOWN: return 0;
-        case D3DDDIFMT_P8: return 8;
-        case D3DDDIFMT_R5G6B5: return 16;
-        case D3DDDIFMT_R8G8B8: return 24;
-        case D3DDDIFMT_X8R8G8B8: // fall through
-        case D3DDDIFMT_A8R8G8B8: return 32;
-        default: QXL_LOG_ASSERTION1("Unknown D3DDDIFORMAT 0x%I64x", Format); return 0;
-    }
-}
-
-// Given bits per pixel, return the pixel format at the same bpp
-D3DDDIFORMAT PixelFormatFromBPP(UINT BPP)
-{
-    switch (BPP)
-    {
-        case  8: return D3DDDIFMT_P8;
-        case 16: return D3DDDIFMT_R5G6B5;
-        case 24: return D3DDDIFMT_R8G8B8;
-        case 32: return D3DDDIFMT_X8R8G8B8;
-        default: QXL_LOG_ASSERTION1("A bit per pixel of 0x%I64x is not supported.", BPP); return D3DDDIFMT_UNKNOWN;
-    }
-}
+UINT BPPFromPixelFormat(D3DDDIFORMAT Format);
+D3DDDIFORMAT PixelFormatFromBPP(UINT BPP);
