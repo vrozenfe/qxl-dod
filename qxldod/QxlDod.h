@@ -212,20 +212,22 @@ class HwDeviceIntrface :
 public:
 //    HwDeviceIntrface(_In_ QxlDod* pQxlDod);
 //    virtual ~HwDeviceIntrface(void);
-    virtual NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
     virtual NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode) = 0;
     virtual NTSTATUS SetCurrentMode(ULONG Mode) = 0;
     virtual NTSTATUS GetCurrentMode(ULONG* Mode) = 0;
     virtual NTSTATUS SetPowerState(POWER_ACTION ActionType) = 0;
-    virtual NTSTATUS HWInit(PCM_RESOURCE_LIST pResList) = 0;
+    virtual NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
+    virtual NTSTATUS HWClose(void) = 0;
     ULONG GetModeCount(void) {return m_ModeCount;}
-    PVBE_MODEINFO GetModeInfo(UINT idx) {return &m_ModeInfo[idx];}
+    PVIDEO_MODE_INFORMATION GetModeInfo(UINT idx) {return &m_ModeInfo[idx];}
     USHORT GetModeNumber(USHORT idx) {return m_ModeNumbers[idx];}
     USHORT GetCurrentModeIndex(void) {return m_CurrentMode;}
     VOID SetCurrentModeIndex(USHORT idx) {m_CurrentMode = idx;}
 protected:
+    virtual NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
+protected:
     QxlDod* m_pQxlDod;
-    PVBE_MODEINFO m_ModeInfo;
+    PVIDEO_MODE_INFORMATION m_ModeInfo;
     ULONG m_ModeCount;
     PUSHORT m_ModeNumbers;
     USHORT m_CurrentMode;
@@ -237,28 +239,52 @@ class VgaDevice  :
 public:
     VgaDevice(_In_ QxlDod* pQxlDod);
     virtual ~VgaDevice(void);
-    NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode);
     NTSTATUS SetCurrentMode(ULONG Mode);
     NTSTATUS GetCurrentMode(ULONG* Mode);
     NTSTATUS SetPowerState(POWER_ACTION ActionType);
-    NTSTATUS HWInit(PCM_RESOURCE_LIST pResList);
+    NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
+    NTSTATUS HWClose(void);
+protected:
+    NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
+private:
+    BOOL SetVideoModeInfo(UINT Idx, PVBE_MODEINFO pModeInfo);
 };
+
+typedef struct _MemSlot {
+    UINT8 generation;
+    UINT64 start_phys_addr;
+    UINT64 end_phys_addr;
+    UINT64 start_virt_addr;
+    UINT64 end_virt_addr;
+    QXLPHYSICAL high_bits;
+} MemSlot;
 
 class QxlDevice  :
     public HwDeviceIntrface
 {
 public:
-    QxlDevice(_In_ QxlDod* pQxlDod){m_pQxlDod = pQxlDod;}
-    virtual ~QxlDevice(void){;}
-    NTSTATUS GetModeList(void);
+    QxlDevice(_In_ QxlDod* pQxlDod);
+    virtual ~QxlDevice(void);
     NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode);
     NTSTATUS SetCurrentMode(ULONG Mode);
     NTSTATUS GetCurrentMode(ULONG* Mode);
     NTSTATUS SetPowerState(POWER_ACTION ActionType);
-    NTSTATUS HWInit(PCM_RESOURCE_LIST pResList);
+    NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
+    NTSTATUS HWClose(void);
+protected:
+    NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
 private:
     void UnmapMemory(void);
+    BOOL SetVideoModeInfo(UINT Idx, QXLMode* pModeInfo);
+    BOOL InitMemSlots(void);
+    BOOL CreateMemSlots(void);
+    void DestroyMemSlots(void);
+    void ResetDevice(void);
+    void SetupHWSlot(UINT8 Idx, MemSlot *pSlot);
+    UINT8 SetupMemSlot(UINT8 Idx, QXLPHYSICAL start, QXLPHYSICAL end);
+    BOOL CreateEvents();
+    BOOL CreateRings();
 private:
     PUCHAR m_IoBase;
     BOOLEAN m_IoMapped;
@@ -275,6 +301,25 @@ private:
 
     QXLRom *m_RomHdr;
     ULONG m_RomSize;
+
+    MemSlot *m_MemSlots;
+    UINT8 m_NumMemSlots;
+    UINT8 m_MainMemSlot;
+    UINT8 m_SurfaceMemSlot;
+    UINT8 m_SlotIdBits;
+    UINT8 m_SlotGenBits;
+    QXLPHYSICAL m_VaSlotMask;
+
+    QXLCommandRing *m_CommandRing;
+    QXLCursorRing *m_CursorRing;
+    QXLReleaseRing *m_ReleaseRing;
+
+    KEVENT m_DisplayEvent;
+    KEVENT m_CursorEvent;
+    KEVENT m_IoCmdEvent;
+
+    PUCHAR m_LogPort;
+    PUCHAR m_LogBuf;
 };
 
 class QxlDod :

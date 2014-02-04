@@ -85,7 +85,7 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
     RtlCopyMemory(&m_DxgkInterface, pDxgkInterface, sizeof(m_DxgkInterface));
     RtlZeroMemory(m_CurrentModes, sizeof(m_CurrentModes));
 //CHECK ME!!!!!!!!!!!!!
-	m_CurrentModes[0].DispInfo.TargetId = D3DDDI_ID_UNINITIALIZED;
+    m_CurrentModes[0].DispInfo.TargetId = D3DDDI_ID_UNINITIALIZED;
     // Get device information from OS.
     NTSTATUS Status = m_DxgkInterface.DxgkCbGetDeviceInformation(m_DxgkInterface.DeviceHandle, &m_DeviceInfo);
     if (!NT_SUCCESS(Status))
@@ -120,18 +120,10 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
         return STATUS_UNSUCCESSFUL;
     }
 
-    Status = m_pHWDevice->HWInit(m_DeviceInfo.TranslatedResourceList);
+    Status = m_pHWDevice->HWInit(m_DeviceInfo.TranslatedResourceList, &m_CurrentModes[0].DispInfo);
     if (!NT_SUCCESS(Status))
     {
         QXL_LOG_ASSERTION1("HWInit failed with status 0x%X\n",
-                           Status);
-        return Status;
-    }
-
-    Status = m_pHWDevice->GetModeList(&m_CurrentModes[0].DispInfo);
-    if (!NT_SUCCESS(Status))
-    {
-        QXL_LOG_ASSERTION1("GetModeList failed with status 0x%X\n",
                            Status);
         return Status;
     }
@@ -691,7 +683,7 @@ NTSTATUS QxlDod::AddSingleSourceMode(_In_ CONST DXGK_VIDPNSOURCEMODESET_INTERFAC
     {
         // Create new mode info that will be populated
         D3DKMDT_VIDPN_SOURCE_MODE* pVidPnSourceModeInfo = NULL;
-        PVBE_MODEINFO pModeInfo = m_pHWDevice->GetModeInfo(idx);
+        PVIDEO_MODE_INFORMATION pModeInfo = m_pHWDevice->GetModeInfo(idx);
         NTSTATUS Status = pVidPnSourceModeSetInterface->pfnCreateNewModeInfo(hVidPnSourceModeSet, &pVidPnSourceModeInfo);
         if (!NT_SUCCESS(Status))
         {
@@ -703,10 +695,10 @@ NTSTATUS QxlDod::AddSingleSourceMode(_In_ CONST DXGK_VIDPNSOURCEMODESET_INTERFAC
         // Populate mode info with values from current mode and hard-coded values
         // Always report 32 bpp format, this will be color converted during the present if the mode is < 32bpp
         pVidPnSourceModeInfo->Type = D3DKMDT_RMT_GRAPHICS;
-        pVidPnSourceModeInfo->Format.Graphics.PrimSurfSize.cx = pModeInfo->XResolution;
-        pVidPnSourceModeInfo->Format.Graphics.PrimSurfSize.cy = pModeInfo->YResolution;
+        pVidPnSourceModeInfo->Format.Graphics.PrimSurfSize.cx = pModeInfo->VisScreenWidth;
+        pVidPnSourceModeInfo->Format.Graphics.PrimSurfSize.cy = pModeInfo->VisScreenHeight;
         pVidPnSourceModeInfo->Format.Graphics.VisibleRegionSize = pVidPnSourceModeInfo->Format.Graphics.PrimSurfSize;
-        pVidPnSourceModeInfo->Format.Graphics.Stride = pModeInfo->BytesPerScanLine / pModeInfo->XResolution;
+        pVidPnSourceModeInfo->Format.Graphics.Stride = pModeInfo->ScreenStride;
         pVidPnSourceModeInfo->Format.Graphics.PixelFormat = D3DDDIFMT_A8R8G8B8;
         pVidPnSourceModeInfo->Format.Graphics.ColorBasis = D3DKMDT_CB_SCRGB;
         pVidPnSourceModeInfo->Format.Graphics.PixelValueAccessMode = D3DKMDT_PVAM_DIRECT;
@@ -747,7 +739,7 @@ NTSTATUS QxlDod::AddSingleTargetMode(_In_ CONST DXGK_VIDPNTARGETMODESET_INTERFAC
 //FIXME !!!!!!
     for (UINT ModeIndex = 0; ModeIndex < m_pHWDevice->GetModeCount(); ++ModeIndex)
     {
-		PVBE_MODEINFO pModeInfo = m_pHWDevice->GetModeInfo(SourceId);
+        PVIDEO_MODE_INFORMATION pModeInfo = m_pHWDevice->GetModeInfo(SourceId);
         pVidPnTargetModeInfo = NULL;
         Status = pVidPnTargetModeSetInterface->pfnCreateNewModeInfo(hVidPnTargetModeSet, &pVidPnTargetModeInfo);
         if (!NT_SUCCESS(Status))
@@ -757,8 +749,8 @@ NTSTATUS QxlDod::AddSingleTargetMode(_In_ CONST DXGK_VIDPNTARGETMODESET_INTERFAC
             return Status;
         }
         pVidPnTargetModeInfo->VideoSignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
-        pVidPnTargetModeInfo->VideoSignalInfo.TotalSize.cx = pModeInfo->XResolution;
-        pVidPnTargetModeInfo->VideoSignalInfo.TotalSize.cy = pModeInfo->YResolution;
+        pVidPnTargetModeInfo->VideoSignalInfo.TotalSize.cx = pModeInfo->VisScreenWidth;
+        pVidPnTargetModeInfo->VideoSignalInfo.TotalSize.cy = pModeInfo->VisScreenHeight;
         pVidPnTargetModeInfo->VideoSignalInfo.ActiveSize = pVidPnTargetModeInfo->VideoSignalInfo.TotalSize;
         pVidPnTargetModeInfo->VideoSignalInfo.VSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
         pVidPnTargetModeInfo->VideoSignalInfo.VSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
@@ -792,7 +784,7 @@ NTSTATUS QxlDod::AddSingleMonitorMode(_In_ CONST DXGKARG_RECOMMENDMONITORMODES* 
     PAGED_CODE();
     NTSTATUS Status = STATUS_SUCCESS;
     D3DKMDT_MONITOR_SOURCE_MODE* pMonitorSourceMode = NULL;
-    PVBE_MODEINFO pVbeModeInfo = NULL;
+    PVIDEO_MODE_INFORMATION pVbeModeInfo = NULL;
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
@@ -804,12 +796,12 @@ NTSTATUS QxlDod::AddSingleMonitorMode(_In_ CONST DXGKARG_RECOMMENDMONITORMODES* 
         return Status;
     }
 
-    pVbeModeInfo = m_pHWDevice->GetModeInfo(m_pHWDevice->GetCurrentModeIndex());//&m_ModeInfo[m_CurrentMode];
+    pVbeModeInfo = m_pHWDevice->GetModeInfo(m_pHWDevice->GetCurrentModeIndex());
 
     // Since we don't know the real monitor timing information, just use the current display mode (from the POST device) with unknown frequencies
     pMonitorSourceMode->VideoSignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
-    pMonitorSourceMode->VideoSignalInfo.TotalSize.cx = pVbeModeInfo->XResolution;
-    pMonitorSourceMode->VideoSignalInfo.TotalSize.cy = pVbeModeInfo->YResolution;
+    pMonitorSourceMode->VideoSignalInfo.TotalSize.cx = pVbeModeInfo->VisScreenWidth;
+    pMonitorSourceMode->VideoSignalInfo.TotalSize.cy = pVbeModeInfo->VisScreenHeight;
     pMonitorSourceMode->VideoSignalInfo.ActiveSize = pMonitorSourceMode->VideoSignalInfo.TotalSize;
     pMonitorSourceMode->VideoSignalInfo.VSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
     pMonitorSourceMode->VideoSignalInfo.VSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
@@ -864,12 +856,12 @@ NTSTATUS QxlDod::AddSingleMonitorMode(_In_ CONST DXGKARG_RECOMMENDMONITORMODES* 
 
         
         DbgPrint(TRACE_LEVEL_INFORMATION, ("%s: add pref mode, dimensions %ux%u, taken from DxgkCbAcquirePostDisplayOwnership at StartDevice\n", __FUNCTION__,
-                   pVbeModeInfo->XResolution, pVbeModeInfo->YResolution));
+                   pVbeModeInfo->VisScreenWidth, pVbeModeInfo->VisScreenHeight));
 
         // Since we don't know the real monitor timing information, just use the current display mode (from the POST device) with unknown frequencies
         pMonitorSourceMode->VideoSignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
-        pMonitorSourceMode->VideoSignalInfo.TotalSize.cx = pVbeModeInfo->XResolution;
-        pMonitorSourceMode->VideoSignalInfo.TotalSize.cy = pVbeModeInfo->YResolution;
+        pMonitorSourceMode->VideoSignalInfo.TotalSize.cx = pVbeModeInfo->VisScreenWidth;
+        pMonitorSourceMode->VideoSignalInfo.TotalSize.cy = pVbeModeInfo->VisScreenHeight;
         pMonitorSourceMode->VideoSignalInfo.ActiveSize = pMonitorSourceMode->VideoSignalInfo.TotalSize;
         pMonitorSourceMode->VideoSignalInfo.VSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
         pMonitorSourceMode->VideoSignalInfo.VSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
@@ -1524,9 +1516,9 @@ NTSTATUS QxlDod::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMo
         pCurrentBddMode->Flags.FullscreenPresent = TRUE;
         for (USHORT ModeIndex = 0; ModeIndex < m_pHWDevice->GetModeCount(); ++ModeIndex)
         {
-			PVBE_MODEINFO pModeInfo = m_pHWDevice->GetModeInfo(m_pHWDevice->GetCurrentModeIndex());
-             if (pCurrentBddMode->DispInfo.Width == pModeInfo->XResolution &&
-                 pCurrentBddMode->DispInfo.Height == pModeInfo->YResolution )
+             PVIDEO_MODE_INFORMATION pModeInfo = m_pHWDevice->GetModeInfo(m_pHWDevice->GetCurrentModeIndex());
+             if (pCurrentBddMode->DispInfo.Width == pModeInfo->VisScreenWidth &&
+                 pCurrentBddMode->DispInfo.Height == pModeInfo->VisScreenHeight )
              {
                  Status = m_pHWDevice->SetCurrentMode(m_pHWDevice->GetModeNumber(ModeIndex));
                  if (NT_SUCCESS(Status))
@@ -1944,13 +1936,12 @@ QxlDod::ExecutePresentDisplayOnly(
 
     RtlZeroMemory(ctx,size);
 
-//    const CURRENT_BDD_MODE* pModeCur = GetCurrentMode(m_SourceId);
     const CURRENT_BDD_MODE* pModeCur = &m_CurrentModes[0];
     ctx->DstAddr          = DstAddr;
     ctx->DstBitPerPixel   = DstBitPerPixel;
-    ctx->DstStride        = pModeCur->DispInfo.Pitch; //m_ModeInfo[m_CurrentMode].BytesPerScanLine;//
-    ctx->SrcWidth         = pModeCur->SrcModeWidth;//m_ModeInfo[m_CurrentMode].XResolution;//
-    ctx->SrcHeight        = pModeCur->SrcModeHeight;//m_ModeInfo[m_CurrentMode].YResolution;//
+    ctx->DstStride        = pModeCur->DispInfo.Pitch;
+    ctx->SrcWidth         = pModeCur->SrcModeWidth;
+    ctx->SrcHeight        = pModeCur->SrcModeHeight;
     ctx->SrcAddr          = NULL;
     ctx->SrcPitch         = SrcPitch;
     ctx->Rotation         = Rotation;
@@ -2477,6 +2468,43 @@ VgaDevice::~VgaDevice(void)
     m_ModeCount = 0;
 }
 
+BOOL VgaDevice::SetVideoModeInfo(UINT Idx, PVBE_MODEINFO pModeInfo)
+{
+    PVIDEO_MODE_INFORMATION pMode = NULL;
+    PAGED_CODE();
+
+    pMode = &m_ModeInfo[Idx];
+    pMode->Length = sizeof(VIDEO_MODE_INFORMATION);
+    pMode->ModeIndex = Idx;//m_ModeNumbers[Idx];
+    pMode->VisScreenWidth = pModeInfo->XResolution;
+    pMode->VisScreenHeight = pModeInfo->YResolution;
+    pMode->ScreenStride = pModeInfo->LinBytesPerScanLine;
+    pMode->NumberOfPlanes = pModeInfo->NumberOfPlanes;
+    pMode->BitsPerPlane = pModeInfo->BitsPerPixel / pModeInfo->NumberOfPlanes;
+    pMode->Frequency = 60;
+    pMode->XMillimeter = pModeInfo->XResolution * 254 / 720;
+    pMode->YMillimeter = pModeInfo->YResolution * 254 / 720;
+
+    if (pModeInfo->BitsPerPixel == 15 && pModeInfo->NumberOfPlanes == 1)
+    {
+        pMode->BitsPerPlane = 16;
+    }
+
+    pMode->NumberRedBits = pModeInfo->LinRedMaskSize;
+    pMode->NumberGreenBits = pModeInfo->LinGreenMaskSize;
+    pMode->NumberBlueBits = pModeInfo->LinBlueMaskSize;
+    pMode->RedMask = ((1 << pModeInfo->LinRedMaskSize) - 1) << pModeInfo->LinRedFieldPosition;
+    pMode->GreenMask = ((1 << pModeInfo->LinGreenMaskSize) - 1) << pModeInfo->LinGreenFieldPosition;
+    pMode->BlueMask = ((1 << pModeInfo->LinBlueMaskSize) - 1) << pModeInfo->LinBlueFieldPosition;
+
+    pMode->AttributeFlags = VIDEO_MODE_COLOR | VIDEO_MODE_GRAPHICS | VIDEO_MODE_NO_OFF_SCREEN;
+    pMode->VideoMemoryBitmapWidth = pModeInfo->XResolution;
+    pMode->VideoMemoryBitmapHeight = pModeInfo->YResolution;
+    pMode->DriverSpecificAttributeFlags = 0;
+
+    return TRUE;
+}
+
 NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
     PAGED_CODE();
@@ -2486,9 +2514,9 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
     ULONG SuitableModeCount;
     USHORT ModeTemp;
     USHORT CurrentMode;
-    PVBE_MODEINFO VbeModeInfo;
     VBE_INFO VbeInfo = {0};
     ULONG Length;
+    VBE_MODEINFO tmpModeInfo;
 
     NTSTATUS Status = STATUS_SUCCESS;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
@@ -2560,7 +2588,7 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
 
     DbgPrint(TRACE_LEVEL_ERROR, ("ModeCount %d\n", ModeCount));
 
-    m_ModeInfo = reinterpret_cast<PVBE_MODEINFO> (new (PagedPool) BYTE[sizeof (VBE_MODEINFO) * ModeCount]);
+    m_ModeInfo = reinterpret_cast<PVIDEO_MODE_INFORMATION> (new (PagedPool) BYTE[sizeof (VIDEO_MODE_INFORMATION) * ModeCount]);
     m_ModeNumbers = reinterpret_cast<PUSHORT> (new (PagedPool)  BYTE [sizeof (USHORT) * ModeCount]);
     m_CurrentMode = 0;
     DbgPrint(TRACE_LEVEL_ERROR, ("m_ModeInfo = 0x%p, m_ModeNumbers = 0x%p\n", m_ModeInfo, m_ModeNumbers)); 
@@ -2594,22 +2622,22 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
         Status = x86BiosReadMemory (
                     m_Segment,
                     m_Offset + sizeof (VbeInfo),
-                    m_ModeInfo + SuitableModeCount,
+                    &tmpModeInfo,
                     sizeof(VBE_MODEINFO));
 
-        VbeModeInfo = m_ModeInfo + SuitableModeCount;
         UINT Height = pDispInfo->Height;
         UINT Width = pDispInfo->Width;
         UINT BitsPerPixel = BPPFromPixelFormat(pDispInfo->ColorFormat);
 
-        if (VbeModeInfo->XResolution >= Width &&
-            VbeModeInfo->YResolution >= Height &&
-            VbeModeInfo->BitsPerPixel == BitsPerPixel &&
-            VbeModeInfo->PhysBasePtr != 0)
+        if (tmpModeInfo.XResolution >= Width &&
+            tmpModeInfo.YResolution >= Height &&
+            tmpModeInfo.BitsPerPixel == BitsPerPixel &&
+            tmpModeInfo.PhysBasePtr != 0)
         {
             m_ModeNumbers[SuitableModeCount] = ModeTemp;
-            if (VbeModeInfo->XResolution == 1024 &&
-                VbeModeInfo->YResolution == 768)
+            SetVideoModeInfo(SuitableModeCount, &tmpModeInfo);
+            if (tmpModeInfo.XResolution == 1024 &&
+                tmpModeInfo.YResolution == 768)
             {
                 m_CurrentMode = (USHORT)SuitableModeCount;
             }
@@ -2629,9 +2657,9 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
     {
         DbgPrint(TRACE_LEVEL_ERROR, ("type %x, XRes = %d, YRes = %d, BPP = %d\n",
                                     m_ModeNumbers[idx],
-                                    m_ModeInfo[idx].XResolution,
-                                    m_ModeInfo[idx].YResolution,
-                                    m_ModeInfo[idx].BitsPerPixel));
+                                    m_ModeInfo[idx].VisScreenWidth,
+                                    m_ModeInfo[idx].VisScreenHeight,
+                                    m_ModeInfo[idx].BitsPerPlane));
     }
 
     if (m_Segment != 0)
@@ -2684,10 +2712,17 @@ NTSTATUS VgaDevice::GetCurrentMode(ULONG* pMode)
     return Status;
 }
 
-NTSTATUS VgaDevice::HWInit(PCM_RESOURCE_LIST pResList)
+NTSTATUS VgaDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     UNREFERENCED_PARAMETER(pResList);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+    return GetModeList(pDispInfo);
+}
+
+NTSTATUS VgaDevice::HWClose(void)
+{
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
 }
@@ -2717,17 +2752,123 @@ NTSTATUS VgaDevice::SetPowerState(POWER_ACTION ActionType)
     return STATUS_SUCCESS;
 }
 
+QxlDevice::QxlDevice(_In_ QxlDod* pQxlDod)
+{
+    m_pQxlDod = pQxlDod;
+    m_ModeInfo = NULL;
+    m_ModeCount = 0;
+    m_ModeNumbers = NULL;
+    m_CurrentMode = 0;
+}
 
-NTSTATUS QxlDevice::GetModeList()
+QxlDevice::~QxlDevice(void)
+{
+    delete [] reinterpret_cast<BYTE*>(m_ModeInfo);
+    delete [] reinterpret_cast<BYTE*>(m_ModeNumbers);
+    m_ModeInfo = NULL;
+    m_ModeNumbers = NULL;
+    m_CurrentMode = 0;
+    m_ModeCount = 0;
+}
+
+BOOL QxlDevice::SetVideoModeInfo(UINT Idx, QXLMode* pModeInfo)
+{
+    PVIDEO_MODE_INFORMATION pMode = NULL;
+    ULONG color_bits;
+    PAGED_CODE();
+
+    pMode = &m_ModeInfo[Idx];
+    pMode->Length = sizeof(VIDEO_MODE_INFORMATION);
+    pMode->ModeIndex = Idx;//m_ModeNumbers[Idx];
+    pMode->VisScreenWidth = pModeInfo->x_res;
+    pMode->VisScreenHeight = pModeInfo->y_res;
+    pMode->ScreenStride = pModeInfo->stride;
+    pMode->NumberOfPlanes = 1;
+    pMode->BitsPerPlane = pModeInfo->bits;
+    pMode->Frequency = 100;
+    pMode->XMillimeter = pModeInfo->x_mili;
+    pMode->YMillimeter = pModeInfo->y_mili;
+    color_bits = (pModeInfo->bits == 16) ? 5 : 8;
+    pMode->NumberRedBits = color_bits;
+    pMode->NumberGreenBits = color_bits;
+    pMode->NumberBlueBits = color_bits;
+
+    pMode->BlueMask = (1 << color_bits) - 1;
+    pMode->GreenMask = pMode->BlueMask << color_bits;
+    pMode->RedMask = pMode->GreenMask << color_bits;
+
+    pMode->AttributeFlags = VIDEO_MODE_COLOR | VIDEO_MODE_GRAPHICS;
+    pMode->VideoMemoryBitmapWidth = pModeInfo->x_res;
+    pMode->VideoMemoryBitmapHeight = pModeInfo->y_res;
+    pMode->DriverSpecificAttributeFlags = pModeInfo->orientation;
+    return TRUE;
+}
+
+NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
     PAGED_CODE();
     NTSTATUS Status = STATUS_SUCCESS;
+    QXLModes *modes;
+    ULONG ModeCount;
+    ULONG SuitableModeCount;
+    USHORT CurrentMode;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
-    if (!NT_SUCCESS (Status))
-    {
-        DbgPrint(TRACE_LEVEL_ERROR, ("x86BiosWriteMemory failed with Status: 0x%X\n", Status));
-        return Status;
+
+    modes = (QXLModes *)((UCHAR*)m_RomHdr + m_RomHdr->modes_offset);
+    if (m_RomSize < m_RomHdr->modes_offset + sizeof(QXLModes) ||
+        (ModeCount = modes->n_modes) == 0 || m_RomSize <
+        m_RomHdr->modes_offset + sizeof(QXLModes) + ModeCount * sizeof(QXLMode)) {
+        DbgPrint(TRACE_LEVEL_ERROR, ("%s: bad rom size\n", __FUNCTION__));
+        return STATUS_UNSUCCESSFUL;
     }
+
+    ModeCount += 2;
+    m_ModeInfo = reinterpret_cast<PVIDEO_MODE_INFORMATION> (new (PagedPool) BYTE[sizeof (VIDEO_MODE_INFORMATION) * ModeCount]);
+    m_ModeNumbers = reinterpret_cast<PUSHORT> (new (PagedPool)  BYTE [sizeof (USHORT) * ModeCount]);
+    m_CurrentMode = 0;
+
+    for (CurrentMode = 0, SuitableModeCount = 0;
+         CurrentMode < ModeCount;
+         CurrentMode++)
+    {
+
+        UINT Height = pDispInfo->Height;
+        UINT Width = pDispInfo->Width;
+        UINT BitsPerPixel = BPPFromPixelFormat(pDispInfo->ColorFormat);
+        QXLMode* tmpModeInfo = &modes->modes[CurrentMode];
+
+        if (tmpModeInfo->x_res >= Width &&
+            tmpModeInfo->y_res >= Height &&
+            tmpModeInfo->bits == BitsPerPixel)
+        {
+            m_ModeNumbers[SuitableModeCount] = (USHORT)SuitableModeCount;
+            SetVideoModeInfo(SuitableModeCount, tmpModeInfo);
+            if (tmpModeInfo->x_res == 1024 &&
+                tmpModeInfo->y_res == 768)
+            {
+                m_CurrentMode = (USHORT)SuitableModeCount;
+            }
+            SuitableModeCount++;
+        }
+    }
+
+    if (SuitableModeCount == 0)
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("No video modes supported\n"));
+        Status = STATUS_UNSUCCESSFUL;
+    }
+
+    m_ModeCount = SuitableModeCount;
+    DbgPrint(TRACE_LEVEL_ERROR, ("ModeCount filtered %d\n", m_ModeCount));
+    for (ULONG idx = 0; idx < m_ModeCount; idx++)
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("type %x, XRes = %d, YRes = %d, BPP = %d\n",
+                                    m_ModeNumbers[idx],
+                                    m_ModeInfo[idx].VisScreenWidth,
+                                    m_ModeInfo[idx].VisScreenHeight,
+                                    m_ModeInfo[idx].BitsPerPlane));
+    }
+
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return Status;
 }
@@ -2766,9 +2907,10 @@ NTSTATUS QxlDevice::SetPowerState(POWER_ACTION ActionType)
     return STATUS_SUCCESS;
 }
 
-NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList)
+NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    NTSTATUS Status = STATUS_SUCCESS;
     PDXGKRNL_INTERFACE pDxgkInterface = m_pQxlDod->GetDxgkInterrface();
     UINT pci_range = QXL_RAM_RANGE_INDEX;
     for (ULONG i = 0; i < pResList->Count; ++i)
@@ -2818,7 +2960,6 @@ NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList)
                                  m_IoBase,
                                  m_IoBase +
                                  m_IoSize));
-
               }
                    break;
               case CmResourceTypeInterrupt:
@@ -2886,12 +3027,31 @@ NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList)
     }
     if (m_IoBase == NULL || m_IoSize == 0 ||
         m_RomHdr == NULL || m_RomSize == 0 ||
+        m_RomHdr->magic != QXL_ROM_MAGIC ||
         m_RamStart == NULL || m_RamSize == 0 ||
-        m_VRamStart == NULL || m_VRamSize == 0)
+        m_VRamStart == NULL || m_VRamSize == 0 ||
+        (m_RamHdr = (QXLRam *)(m_RamStart + m_RomHdr->ram_header_offset)) == NULL ||
+        m_RamHdr->magic != QXL_RAM_MAGIC || !InitMemSlots()) 
     {
         UnmapMemory();
+        DestroyMemSlots();
         return STATUS_UNSUCCESSFUL;
     }
+
+    m_LogBuf = m_RamHdr->log_buf;
+    m_LogPort = m_IoBase + QXL_IO_LOG;
+
+    Status = GetModeList(pDispInfo);
+    if (!NT_SUCCESS(Status))
+    {
+        QXL_LOG_ASSERTION1("GetModeList failed with status 0x%X\n",
+                           Status);
+        return Status;
+    }
+
+    CreateEvents();
+    CreateRings();
+    CreateMemSlots();
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
@@ -2923,6 +3083,102 @@ void QxlDevice::UnmapMemory(void)
         m_VRamStart = NULL;
     }
 }
+
+BOOL QxlDevice::InitMemSlots(void)
+{
+    m_NumMemSlots = m_RomHdr->slots_end;
+    m_SlotGenBits = m_RomHdr->slot_gen_bits;
+    m_SlotIdBits = m_RomHdr->slot_id_bits;
+    m_VaSlotMask = (~(uint64_t)0) >> (m_SlotIdBits + m_SlotGenBits);
+    size_t size = m_NumMemSlots * sizeof(MemSlot);
+    m_MemSlots = reinterpret_cast<MemSlot*>
+                                (new (PagedPool) BYTE[size]);
+    if (m_MemSlots)
+    {
+        RtlZeroMemory(m_MemSlots, size);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+void QxlDevice::DestroyMemSlots(void)
+{
+    delete [] reinterpret_cast<BYTE*>(m_MemSlots);
+    m_MemSlots = NULL;
+}
+
+void QxlDevice::SetupHWSlot(UINT8 Idx, MemSlot *pSlot)
+{
+    m_RamHdr->mem_slot.mem_start = pSlot->start_phys_addr;
+    m_RamHdr->mem_slot.mem_end = pSlot->end_phys_addr;
+    WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_MEMSLOT_ADD), Idx);
+}
+
+BOOL QxlDevice::CreateEvents()
+{
+    KeInitializeEvent(&m_DisplayEvent,
+                      SynchronizationEvent,
+                      FALSE);
+    KeInitializeEvent(&m_CursorEvent,
+                      SynchronizationEvent,
+                      FALSE);
+    KeInitializeEvent(&m_IoCmdEvent,
+                      SynchronizationEvent,
+                      FALSE);
+    return TRUE;
+}
+
+BOOL QxlDevice::CreateRings()
+{
+    m_CommandRing = &(m_RamHdr->cmd_ring);
+    m_CursorRing = &(m_RamHdr->cursor_ring);
+    m_ReleaseRing = &(m_RamHdr->release_ring);
+    return TRUE;
+}
+
+UINT8 QxlDevice::SetupMemSlot(UINT8 Idx, QXLPHYSICAL start, QXLPHYSICAL end)
+{
+    UINT64 high_bits;
+    MemSlot *pSlot;
+    UINT8 slot_index;
+
+    slot_index = m_RomHdr->slots_start + Idx;
+    pSlot = &m_MemSlots[slot_index];
+    pSlot->start_phys_addr = start;
+    pSlot->end_phys_addr = end;
+
+    SetupHWSlot(Idx, pSlot);
+
+    pSlot->generation = m_RomHdr->slot_generation;
+    high_bits = slot_index << m_SlotGenBits;
+    high_bits |= pSlot->generation;
+    high_bits <<= (64 - (m_SlotGenBits + m_SlotIdBits));
+    pSlot->high_bits = high_bits;
+    return slot_index;
+}
+
+BOOL QxlDevice::CreateMemSlots(void)
+{
+    m_MainMemSlot= SetupMemSlot(0, (QXLPHYSICAL)m_VRamStart, (QXLPHYSICAL)(m_VRamStart + m_RomHdr->ram_header_offset));
+    m_SurfaceMemSlot = SetupMemSlot(1, (QXLPHYSICAL)m_RamStart, (QXLPHYSICAL)(m_RamStart + m_RamSize));
+    return TRUE;
+}
+
+void QxlDevice::ResetDevice(void)
+{
+    m_RamHdr->int_mask = ~0;
+    WRITE_PORT_UCHAR(m_IoBase + QXL_IO_MEMSLOT_ADD, 0);
+}
+
+NTSTATUS QxlDevice::HWClose(void)
+{
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    UnmapMemory();
+    DestroyMemSlots();
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+    return STATUS_SUCCESS;
+}
+
 UINT BPPFromPixelFormat(D3DDDIFORMAT Format)
 {
     switch (Format)
