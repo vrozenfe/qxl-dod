@@ -55,7 +55,7 @@ QxlDod::QxlDod(_In_ DEVICE_OBJECT* pPhysicalDeviceObject) : m_pPhysicalDevice(pP
     RtlZeroMemory(&m_DeviceInfo, sizeof(m_DeviceInfo));
     RtlZeroMemory(m_CurrentModes, sizeof(m_CurrentModes));
     RtlZeroMemory(&m_PointerShape, sizeof(m_PointerShape));
-    m_pHWDevice = new(PagedPool) VgaDevice(this);
+    m_pHWDevice = NULL;
     DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
 }
 
@@ -66,9 +66,46 @@ QxlDod::~QxlDod(void)
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     CleanUp();
     delete m_pHWDevice;
+    m_pHWDevice = NULL;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
+NTSTATUS QxlDod::CheckHardware()
+{
+    PAGED_CODE();
+
+    NTSTATUS Status;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+
+
+    // Get the Vendor & Device IDs on PCI system
+    PCI_COMMON_HEADER Header = {0};
+    ULONG BytesRead;
+
+    Status = m_DxgkInterface.DxgkCbReadDeviceSpace(m_DxgkInterface.DeviceHandle,
+                                                   DXGK_WHICHSPACE_CONFIG,
+                                                   &Header,
+                                                   0,
+                                                   sizeof(Header),
+                                                   &BytesRead);
+
+    if (!NT_SUCCESS(Status))
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("DxgkCbReadDeviceSpace failed with status 0x%X\n", Status));
+        return Status;
+    }
+
+    Status = STATUS_GRAPHICS_DRIVER_MISMATCH;
+    if (Header.VendorID == 0x1B36 &&
+        Header.DeviceID == 0x0100 &&
+        Header.RevisionID == 4)
+    {
+        Status = STATUS_SUCCESS;
+    }
+
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s returned with status 0x%X\n", __FUNCTION__, Status));
+    return Status;
+}
 
 NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
                          _In_  DXGKRNL_INTERFACE* pDxgkInterface,
@@ -103,13 +140,6 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
         return Status;
     }
 
-// TODO: Uncomment the line below after updating the TODOs in the function CheckHardware
-//    Status = CheckHardware();
-//    if (!NT_SUCCESS(Status))
-//    {
-//        return Status;
-//    }
-
     // This sample driver only uses the frame buffer of the POST device. DxgkCbAcquirePostDisplayOwnership 
     // gives you the frame buffer address and ensures that no one else is drawing to it. Be sure to give it back!
     Status = m_DxgkInterface.DxgkCbAcquirePostDisplayOwnership(m_DxgkInterface.DeviceHandle, &(m_CurrentModes[0].DispInfo));
@@ -117,14 +147,25 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
     {
         // The most likely cause of failure is that the driver is simply not running on a POST device, or we are running
         // after a pre-WDDM 1.2 driver. Since we can't draw anything, we should fail to start.
+        DbgPrint(TRACE_LEVEL_ERROR, ("DxgkCbAcquirePostDisplayOwnership failed with status 0x%X Width = %d\n",
+                           Status, m_CurrentModes[0].DispInfo.Width));
         return STATUS_UNSUCCESSFUL;
+    }
+
+    Status = CheckHardware();
+    if (NT_SUCCESS(Status))
+    {
+        m_pHWDevice = new(PagedPool) QxlDevice(this);
+    }
+    else
+    {
+        m_pHWDevice = new(PagedPool) VgaDevice(this);
     }
 
     Status = m_pHWDevice->HWInit(m_DeviceInfo.TranslatedResourceList, &m_CurrentModes[0].DispInfo);
     if (!NT_SUCCESS(Status))
     {
-        QXL_LOG_ASSERTION1("HWInit failed with status 0x%X\n",
-                           Status);
+        DbgPrint(TRACE_LEVEL_ERROR, ("HWInit failed with status 0x%X\n", Status));
         return Status;
     }
 
@@ -456,7 +497,7 @@ NTSTATUS QxlDod::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DISPLAYONLY* pPre
                 m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].SrcModeWidth)*DstBitPerPixel/8;
             pDst += (int)CenterShift/2;
         }
-        Status = ExecutePresentDisplayOnly(
+        Status = m_pHWDevice->ExecutePresentDisplayOnly(
                             pDst,
                             DstBitPerPixel,
                             (BYTE*)pPresentDisplayOnly->pSource,
@@ -466,7 +507,8 @@ NTSTATUS QxlDod::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DISPLAYONLY* pPre
                             pPresentDisplayOnly->pMoves,
                             pPresentDisplayOnly->NumDirtyRects,
                             pPresentDisplayOnly->pDirtyRect,
-                            RotationNeededByFb);
+                            RotationNeededByFb,
+                            &m_CurrentModes[0]);
     }
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return Status;
@@ -499,62 +541,13 @@ NTSTATUS QxlDod::StopDeviceAndReleasePostDisplayOwnership(_In_  D3DDDI_VIDEO_PRE
     }
 
     // The driver has to black out the display and ensure it is visible when releasing ownership
-    BlackOutScreen(SourceId);
+    m_pHWDevice->BlackOutScreen(&m_CurrentModes[SourceId]);
 
     *pDisplayInfo = m_CurrentModes[SourceId].DispInfo;
 
     return StopDevice();
 }
 
-VOID QxlDod::BlackOutScreen(D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId)
-{
-    PAGED_CODE();
-
-    UINT ScreenHeight = m_CurrentModes[SourceId].DispInfo.Height;
-    UINT ScreenPitch = m_CurrentModes[SourceId].DispInfo.Pitch;
-
-    PHYSICAL_ADDRESS NewPhysAddrStart = m_CurrentModes[SourceId].DispInfo.PhysicAddress;
-    PHYSICAL_ADDRESS NewPhysAddrEnd;
-    NewPhysAddrEnd.QuadPart = NewPhysAddrStart.QuadPart + (ScreenHeight * ScreenPitch);
-
-    if (m_CurrentModes[SourceId].Flags.FrameBufferIsActive)
-    {
-        BYTE* MappedAddr = reinterpret_cast<BYTE*>(m_CurrentModes[SourceId].FrameBuffer.Ptr);
-
-        // Zero any memory at the start that hasn't been zeroed recently
-        if (NewPhysAddrStart.QuadPart < m_CurrentModes[SourceId].ZeroedOutStart.QuadPart)
-        {
-            if (NewPhysAddrEnd.QuadPart < m_CurrentModes[SourceId].ZeroedOutStart.QuadPart)
-            {
-                // No overlap
-                RtlZeroMemory(MappedAddr, ScreenHeight * ScreenPitch);
-            }
-            else
-            {
-                RtlZeroMemory(MappedAddr, (UINT)(m_CurrentModes[SourceId].ZeroedOutStart.QuadPart - NewPhysAddrStart.QuadPart));
-            }
-        }
-
-        // Zero any memory at the end that hasn't been zeroed recently
-        if (NewPhysAddrEnd.QuadPart > m_CurrentModes[SourceId].ZeroedOutEnd.QuadPart)
-        {
-            if (NewPhysAddrStart.QuadPart > m_CurrentModes[SourceId].ZeroedOutEnd.QuadPart)
-            {
-                // No overlap
-                // NOTE: When actual pixels were the most recent thing drawn, ZeroedOutStart & ZeroedOutEnd will both be 0
-                // and this is the path that will be used to black out the current screen.
-                RtlZeroMemory(MappedAddr, ScreenHeight * ScreenPitch);
-            }
-            else
-            {
-                RtlZeroMemory(MappedAddr, (UINT)(NewPhysAddrEnd.QuadPart - m_CurrentModes[SourceId].ZeroedOutEnd.QuadPart));
-            }
-        }
-    }
-
-    m_CurrentModes[SourceId].ZeroedOutStart.QuadPart = NewPhysAddrStart.QuadPart;
-    m_CurrentModes[SourceId].ZeroedOutEnd.QuadPart = NewPhysAddrEnd.QuadPart;
-}
 
 NTSTATUS QxlDod::QueryVidPnHWCapability(_Inout_ DXGKARG_QUERYVIDPNHWCAPABILITY* pVidPnHWCaps)
 {
@@ -1275,7 +1268,7 @@ NTSTATUS QxlDod::SetVidPnSourceVisibility(_In_ CONST DXGKARG_SETVIDPNSOURCEVISIB
         }
         else
         {
-            BlackOutScreen(SourceId);
+            m_pHWDevice->BlackOutScreen(&m_CurrentModes[SourceId]);
         }
 
         // Store current visibility so it can be dealt with during Present call
@@ -1481,7 +1474,7 @@ NTSTATUS QxlDod::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMo
                                                     CONST D3DKMDT_VIDPN_PRESENT_PATH* pPath)
 {
     PAGED_CODE();
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s SourceId = %d\n", __FUNCTION__, pPath->VidPnSourceId));
 
     NTSTATUS Status = STATUS_SUCCESS;
 
@@ -1510,13 +1503,15 @@ NTSTATUS QxlDod::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMo
     {
 
         pCurrentBddMode->Flags.FrameBufferIsActive = TRUE;
-        BlackOutScreen(pPath->VidPnSourceId);
+        m_pHWDevice->BlackOutScreen(&m_CurrentModes[pPath->VidPnSourceId]);
 
         // Mark that the next present should be fullscreen so the screen doesn't go from black to actual pixels one dirty rect at a time.
         pCurrentBddMode->Flags.FullscreenPresent = TRUE;
         for (USHORT ModeIndex = 0; ModeIndex < m_pHWDevice->GetModeCount(); ++ModeIndex)
         {
-             PVIDEO_MODE_INFORMATION pModeInfo = m_pHWDevice->GetModeInfo(m_pHWDevice->GetCurrentModeIndex());
+             PVIDEO_MODE_INFORMATION pModeInfo = m_pHWDevice->GetModeInfo(ModeIndex);
+             DbgPrint(TRACE_LEVEL_INFORMATION, ("%d\t%d x %d\t%d x %d\n", ModeIndex, pCurrentBddMode->DispInfo.Width, pCurrentBddMode->DispInfo.Height,
+                                pModeInfo->VisScreenWidth, pModeInfo->VisScreenHeight));
              if (pCurrentBddMode->DispInfo.Width == pModeInfo->VisScreenWidth &&
                  pCurrentBddMode->DispInfo.Height == pModeInfo->VisScreenHeight )
              {
@@ -1530,7 +1525,7 @@ NTSTATUS QxlDod::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMo
         }
     }
 
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
     return Status;
 }
 
@@ -1877,481 +1872,6 @@ NTSTATUS QxlDod::RegisterHWInfo()
 }
 
 
-NTSTATUS
-QxlDod::ExecutePresentDisplayOnly(
-    _In_ BYTE*             DstAddr,
-    _In_ UINT              DstBitPerPixel,
-    _In_ BYTE*             SrcAddr,
-    _In_ UINT              SrcBytesPerPixel,
-    _In_ LONG              SrcPitch,
-    _In_ ULONG             NumMoves,
-    _In_ D3DKMT_MOVE_RECT* Moves,
-    _In_ ULONG             NumDirtyRects,
-    _In_ RECT*             DirtyRect,
-    _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation)
-/*++
-
-  Routine Description:
-
-    The method creates present worker thread and provides context
-    for it filled with present commands
-
-  Arguments:
-
-    DstAddr - address of destination surface
-    DstBitPerPixel - color depth of destination surface
-    SrcAddr - address of source surface
-    SrcBytesPerPixel - bytes per pixel of source surface
-    SrcPitch - source surface pitch (bytes in a row)
-    NumMoves - number of moves to be copied
-    Moves - moves' data
-    NumDirtyRects - number of rectangles to be copied
-    DirtyRect - rectangles' data
-    Rotation - roatation to be performed when executing copy
-    CallBack - callback for present worker thread to report execution status
-
-  Return Value:
-
-    Status
-
---*/
-{
-
-    PAGED_CODE();
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
-
-    NTSTATUS Status = STATUS_SUCCESS;
-
-    SIZE_T sizeMoves = NumMoves*sizeof(D3DKMT_MOVE_RECT);
-    SIZE_T sizeRects = NumDirtyRects*sizeof(RECT);
-    SIZE_T size = sizeof(DoPresentMemory) + sizeMoves + sizeRects;
-
-    DoPresentMemory* ctx = reinterpret_cast<DoPresentMemory*>
-                                (new (NonPagedPoolNx) BYTE[size]);
-
-    if (!ctx)
-    {
-        return STATUS_NO_MEMORY;
-    }
-
-    RtlZeroMemory(ctx,size);
-
-    const CURRENT_BDD_MODE* pModeCur = &m_CurrentModes[0];
-    ctx->DstAddr          = DstAddr;
-    ctx->DstBitPerPixel   = DstBitPerPixel;
-    ctx->DstStride        = pModeCur->DispInfo.Pitch;
-    ctx->SrcWidth         = pModeCur->SrcModeWidth;
-    ctx->SrcHeight        = pModeCur->SrcModeHeight;
-    ctx->SrcAddr          = NULL;
-    ctx->SrcPitch         = SrcPitch;
-    ctx->Rotation         = Rotation;
-    ctx->NumMoves         = NumMoves;
-    ctx->Moves            = Moves;
-    ctx->NumDirtyRects    = NumDirtyRects;
-    ctx->DirtyRect        = DirtyRect;
-//    ctx->SourceID         = m_SourceId;
-//    ctx->hAdapter         = m_DevExt;
-    ctx->Mdl              = NULL;
-    ctx->DisplaySource    = this;
-
-    // Alternate between synch and asynch execution, for demonstrating 
-    // that a real hardware implementation can do either
-
-    {
-        // Map Source into kernel space, as Blt will be executed by system worker thread
-        UINT sizeToMap = SrcBytesPerPixel * ctx->SrcWidth * ctx->SrcHeight;
-
-        PMDL mdl = IoAllocateMdl((PVOID)SrcAddr, sizeToMap,  FALSE, FALSE, NULL);
-        if(!mdl)
-        {
-            return STATUS_INSUFFICIENT_RESOURCES;
-        }
-
-        KPROCESSOR_MODE AccessMode = static_cast<KPROCESSOR_MODE>(( SrcAddr <=
-                        (BYTE* const) MM_USER_PROBE_ADDRESS)?UserMode:KernelMode);
-        __try
-        {
-            // Probe and lock the pages of this buffer in physical memory.
-            // We need only IoReadAccess.
-            MmProbeAndLockPages(mdl, AccessMode, IoReadAccess);
-        }
-        #pragma prefast(suppress: __WARNING_EXCEPTIONEXECUTEHANDLER, "try/except is only able to protect against user-mode errors and these are the only errors we try to catch here");
-        __except(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = GetExceptionCode();
-            IoFreeMdl(mdl);
-            return Status;
-        }
-
-        // Map the physical pages described by the MDL into system space.
-        // Note: double mapping the buffer this way causes lot of system
-        // overhead for large size buffers.
-        ctx->SrcAddr = reinterpret_cast<BYTE*>
-            (MmGetSystemAddressForMdlSafe(mdl, NormalPagePriority ));
-
-        if(!ctx->SrcAddr) {
-            Status = STATUS_INSUFFICIENT_RESOURCES;
-            MmUnlockPages(mdl);
-            IoFreeMdl(mdl);
-            return Status;
-        }
-
-        // Save Mdl to unmap and unlock the pages in worker thread
-        ctx->Mdl = mdl;
-    }
-
-    BYTE* rects = reinterpret_cast<BYTE*>(ctx+1);
-
-    // copy moves and update pointer
-    if (Moves)
-    {
-        memcpy(rects,Moves,sizeMoves);
-        ctx->Moves = reinterpret_cast<D3DKMT_MOVE_RECT*>(rects);
-        rects += sizeMoves;
-    }
-
-    // copy dirty rects and update pointer
-    if (DirtyRect)
-    {
-        memcpy(rects,DirtyRect,sizeRects);
-        ctx->DirtyRect = reinterpret_cast<RECT*>(rects);
-    }
-
-
-//    HwExecutePresentDisplayOnly((PVOID)ctx);
-
-
-    // Set up destination blt info
-    BLT_INFO DstBltInfo;
-    DstBltInfo.pBits = ctx->DstAddr;
-    DstBltInfo.Pitch = ctx->DstStride;
-    DstBltInfo.BitsPerPel = ctx->DstBitPerPixel;
-    DstBltInfo.Offset.x = 0;
-    DstBltInfo.Offset.y = 0;
-    DstBltInfo.Rotation = ctx->Rotation;
-    DstBltInfo.Width = ctx->SrcWidth;
-    DstBltInfo.Height = ctx->SrcHeight;
-
-    // Set up source blt info
-    BLT_INFO SrcBltInfo;
-    SrcBltInfo.pBits = ctx->SrcAddr;
-    SrcBltInfo.Pitch = ctx->SrcPitch;
-    SrcBltInfo.BitsPerPel = 32;
-    SrcBltInfo.Offset.x = 0;
-    SrcBltInfo.Offset.y = 0;
-    SrcBltInfo.Rotation = D3DKMDT_VPPR_IDENTITY;
-    if (ctx->Rotation == D3DKMDT_VPPR_ROTATE90 ||
-        ctx->Rotation == D3DKMDT_VPPR_ROTATE270)
-    {
-        SrcBltInfo.Width = DstBltInfo.Height;
-        SrcBltInfo.Height = DstBltInfo.Width;
-    }
-    else
-    {
-        SrcBltInfo.Width = DstBltInfo.Width;
-        SrcBltInfo.Height = DstBltInfo.Height;
-    }
-
-
-    // Copy all the scroll rects from source image to video frame buffer.
-    for (UINT i = 0; i < ctx->NumMoves; i++)
-    {
-        BltBits(&DstBltInfo,
-        &SrcBltInfo,
-        1, // NumRects
-        &ctx->Moves[i].DestRect);
-    }
-
-    // Copy all the dirty rects from source image to video frame buffer.
-    for (UINT i = 0; i < ctx->NumDirtyRects; i++)
-    {
-
-        BltBits(&DstBltInfo,
-        &SrcBltInfo,
-        1, // NumRects
-        &ctx->DirtyRect[i]);
-    }
-
-    // Unmap unmap and unlock the pages.
-    if (ctx->Mdl)
-    {
-        MmUnlockPages(ctx->Mdl);
-        IoFreeMdl(ctx->Mdl);
-    }
-    delete [] reinterpret_cast<BYTE*>(ctx);
-
-    return STATUS_SUCCESS;
-}
-
-
-VOID QxlDod::GetPitches(_In_ CONST BLT_INFO* pBltInfo, _Out_ LONG* pPixelPitch, _Out_ LONG* pRowPitch)
-{
-    switch (pBltInfo->Rotation)
-    {
-        case D3DKMDT_VPPR_IDENTITY:
-        {
-            *pPixelPitch = (pBltInfo->BitsPerPel / BITS_PER_BYTE);
-            *pRowPitch = pBltInfo->Pitch;
-            return;
-        }
-        case D3DKMDT_VPPR_ROTATE90:
-        {
-            *pPixelPitch = -((LONG)pBltInfo->Pitch);
-            *pRowPitch = (pBltInfo->BitsPerPel / BITS_PER_BYTE);
-            return;
-        }
-        case D3DKMDT_VPPR_ROTATE180:
-        {
-            *pPixelPitch = -((LONG)pBltInfo->BitsPerPel / BITS_PER_BYTE);
-            *pRowPitch = -((LONG)pBltInfo->Pitch);
-            return;
-        }
-        case D3DKMDT_VPPR_ROTATE270:
-        {
-            *pPixelPitch = pBltInfo->Pitch;
-            *pRowPitch = -((LONG)pBltInfo->BitsPerPel / BITS_PER_BYTE);
-            return;
-        }
-        default:
-        {
-            QXL_LOG_ASSERTION1("Invalid rotation (0x%I64x) specified", pBltInfo->Rotation);
-            *pPixelPitch = 0;
-            *pRowPitch = 0;
-            return;
-        }
-    }
-}
-
-BYTE* QxlDod::GetRowStart(_In_ CONST BLT_INFO* pBltInfo, CONST RECT* pRect)
-{
-    BYTE* pRet = NULL;
-    LONG OffLeft = pRect->left + pBltInfo->Offset.x;
-    LONG OffTop = pRect->top + pBltInfo->Offset.y;
-    LONG BytesPerPixel = (pBltInfo->BitsPerPel / BITS_PER_BYTE);
-    switch (pBltInfo->Rotation)
-    {
-        case D3DKMDT_VPPR_IDENTITY:
-        {
-            pRet = ((BYTE*)pBltInfo->pBits +
-                           OffTop * pBltInfo->Pitch +
-                           OffLeft * BytesPerPixel);
-            break;
-        }
-        case D3DKMDT_VPPR_ROTATE90:
-        {
-            pRet = ((BYTE*)pBltInfo->pBits +
-                           (pBltInfo->Height - 1 - OffLeft) * pBltInfo->Pitch +
-                           OffTop * BytesPerPixel);
-            break;
-        }
-        case D3DKMDT_VPPR_ROTATE180:
-        {
-            pRet = ((BYTE*)pBltInfo->pBits +
-                           (pBltInfo->Height - 1 - OffTop) * pBltInfo->Pitch +
-                           (pBltInfo->Width - 1 - OffLeft) * BytesPerPixel);
-            break;
-        }
-        case D3DKMDT_VPPR_ROTATE270:
-        {
-            pRet = ((BYTE*)pBltInfo->pBits +
-                           OffLeft * pBltInfo->Pitch +
-                           (pBltInfo->Width - 1 - OffTop) * BytesPerPixel);
-            break;
-        }
-        default:
-        {
-            QXL_LOG_ASSERTION1("Invalid rotation (0x%I64x) specified", pBltInfo->Rotation);
-            break;
-        }
-    }
-
-    return pRet;
-}
-
-/****************************Internal*Routine******************************\
- * CopyBitsGeneric
- *
- *
- * Blt function which can handle a rotated dst/src, offset rects in dst/src
- * and bpp combinations of:
- *   dst | src
- *    32 | 32   // For identity rotation this is much faster in CopyBits32_32
- *    32 | 24
- *    32 | 16
- *    24 | 32
- *    16 | 32
- *     8 | 32
- *    24 | 24   // untested
- *
-\**************************************************************************/
-
-VOID QxlDod::CopyBitsGeneric(
-    BLT_INFO* pDst,
-    CONST BLT_INFO* pSrc,
-    UINT  NumRects,
-    _In_reads_(NumRects) CONST RECT *pRects)
-{
-    LONG DstPixelPitch = 0;
-    LONG DstRowPitch = 0;
-    LONG SrcPixelPitch = 0;
-    LONG SrcRowPitch = 0;
-
-    DbgPrint(TRACE_LEVEL_VERBOSE , ("---> %s NumRects = %d Dst = %p Src = %p\n", __FUNCTION__, NumRects, pDst->pBits, pSrc->pBits));
-
-    GetPitches(pDst, &DstPixelPitch, &DstRowPitch);
-    GetPitches(pSrc, &SrcPixelPitch, &SrcRowPitch);
-
-    for (UINT iRect = 0; iRect < NumRects; iRect++)
-    {
-        CONST RECT* pRect = &pRects[iRect];
-
-        NT_ASSERT(pRect->right >= pRect->left);
-        NT_ASSERT(pRect->bottom >= pRect->top);
-
-        UINT NumPixels = pRect->right - pRect->left;
-        UINT NumRows = pRect->bottom - pRect->top;
-
-        BYTE* pDstRow = GetRowStart(pDst, pRect);
-        CONST BYTE* pSrcRow = GetRowStart(pSrc, pRect);
-
-        for (UINT y=0; y < NumRows; y++)
-        {
-            BYTE* pDstPixel = pDstRow;
-            CONST BYTE* pSrcPixel = pSrcRow;
-
-            for (UINT x=0; x < NumPixels; x++)
-            {
-                if ((pDst->BitsPerPel == 24) ||
-                    (pSrc->BitsPerPel == 24))
-                {
-                    pDstPixel[0] = pSrcPixel[0];
-                    pDstPixel[1] = pSrcPixel[1];
-                    pDstPixel[2] = pSrcPixel[2];
-                    // pPixel[3] is the alpha channel and is ignored for whichever of Src/Dst is 32bpp
-                }
-                else if (pDst->BitsPerPel == 32)
-                {
-                    if (pSrc->BitsPerPel == 32)
-                    {
-                        UINT32* pDstPixelAs32 = (UINT32*)pDstPixel;
-                        UINT32* pSrcPixelAs32 = (UINT32*)pSrcPixel;
-                        *pDstPixelAs32 = *pSrcPixelAs32;
-                    }
-                    else if (pSrc->BitsPerPel == 16)
-                    {
-                        UINT32* pDstPixelAs32 = (UINT32*)pDstPixel;
-                        UINT16* pSrcPixelAs16 = (UINT16*)pSrcPixel;
-
-                        *pDstPixelAs32 = CONVERT_16BPP_TO_32BPP(*pSrcPixelAs16);
-                    }
-                    else
-                    {
-                        // Invalid pSrc->BitsPerPel on a pDst->BitsPerPel of 32
-                        NT_ASSERT(FALSE);
-                    }
-                }
-                else if (pDst->BitsPerPel == 16)
-                {
-                    NT_ASSERT(pSrc->BitsPerPel == 32);
-
-                    UINT16* pDstPixelAs16 = (UINT16*)pDstPixel;
-                    *pDstPixelAs16 = CONVERT_32BPP_TO_16BPP(pSrcPixel);
-                }
-                else if (pDst->BitsPerPel == 8)
-                {
-                    NT_ASSERT(pSrc->BitsPerPel == 32);
-
-                    *pDstPixel = CONVERT_32BPP_TO_8BPP(pSrcPixel);
-                }
-                else
-                {
-                    // Invalid pDst->BitsPerPel
-                    NT_ASSERT(FALSE);
-                }
-                pDstPixel += DstPixelPitch;
-                pSrcPixel += SrcPixelPitch;
-            }
-
-            pDstRow += DstRowPitch;
-            pSrcRow += SrcRowPitch;
-        }
-    }
-}
-
-
-VOID QxlDod::CopyBits32_32(
-    BLT_INFO* pDst,
-    CONST BLT_INFO* pSrc,
-    UINT  NumRects,
-    _In_reads_(NumRects) CONST RECT *pRects)
-{
-    NT_ASSERT((pDst->BitsPerPel == 32) &&
-              (pSrc->BitsPerPel == 32));
-    NT_ASSERT((pDst->Rotation == D3DKMDT_VPPR_IDENTITY) &&
-              (pSrc->Rotation == D3DKMDT_VPPR_IDENTITY));
-
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
-
-    for (UINT iRect = 0; iRect < NumRects; iRect++)
-    {
-        CONST RECT* pRect = &pRects[iRect];
-
-        NT_ASSERT(pRect->right >= pRect->left);
-        NT_ASSERT(pRect->bottom >= pRect->top);
-
-        UINT NumPixels = pRect->right - pRect->left;
-        UINT NumRows = pRect->bottom - pRect->top;
-        UINT BytesToCopy = NumPixels * 4;
-        BYTE* pStartDst = ((BYTE*)pDst->pBits +
-                          (pRect->top + pDst->Offset.y) * pDst->Pitch +
-                          (pRect->left + pDst->Offset.x) * 4);
-        CONST BYTE* pStartSrc = ((BYTE*)pSrc->pBits +
-                                (pRect->top + pSrc->Offset.y) * pSrc->Pitch +
-                                (pRect->left + pSrc->Offset.x) * 4);
-
-        for (UINT i = 0; i < NumRows; ++i)
-        {
-            RtlCopyMemory(pStartDst, pStartSrc, BytesToCopy);
-            pStartDst += pDst->Pitch;
-            pStartSrc += pSrc->Pitch;
-        }
-    }
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
-}
-
-
-VOID QxlDod::BltBits (
-    BLT_INFO* pDst,
-    CONST BLT_INFO* pSrc,
-    UINT  NumRects,
-    _In_reads_(NumRects) CONST RECT *pRects)
-{
-    // pSrc->pBits might be coming from user-mode. User-mode addresses when accessed by kernel need to be protected by a __try/__except.
-    // This usage is redundant in the sample driver since it is already being used for MmProbeAndLockPages. However, it is very important
-    // to have this in place and to make sure developers don't miss it, it is in these two locations.
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
-    __try
-    {
-        if (pDst->BitsPerPel == 32 &&
-            pSrc->BitsPerPel == 32 &&
-            pDst->Rotation == D3DKMDT_VPPR_IDENTITY &&
-            pSrc->Rotation == D3DKMDT_VPPR_IDENTITY)
-        {
-            // This is by far the most common copy function being called
-            CopyBits32_32(pDst, pSrc, NumRects, pRects);
-        }
-        else
-        {
-            CopyBitsGeneric(pDst, pSrc, NumRects, pRects);
-        }
-    }
-    #pragma prefast(suppress: __WARNING_EXCEPTIONEXECUTEHANDLER, "try/except is only able to protect against user-mode errors and these are the only errors we try to catch here");
-    __except(EXCEPTION_EXECUTE_HANDLER)
-    {
-        DbgPrint(TRACE_LEVEL_ERROR, ("Either dst (0x%I64x) or src (0x%I64x) bits encountered exception during access.\n", pDst->pBits, pSrc->pBits));
-    }
-}
-
 //
 // Non-Paged Code
 //
@@ -2447,7 +1967,278 @@ UnmapFrameBuffer(
     return STATUS_SUCCESS;
 }
 
+
+
+
 // HW specific code
+
+VOID GetPitches(_In_ CONST BLT_INFO* pBltInfo, _Out_ LONG* pPixelPitch, _Out_ LONG* pRowPitch)
+{
+    switch (pBltInfo->Rotation)
+    {
+        case D3DKMDT_VPPR_IDENTITY:
+        {
+            *pPixelPitch = (pBltInfo->BitsPerPel / BITS_PER_BYTE);
+            *pRowPitch = pBltInfo->Pitch;
+            return;
+        }
+        case D3DKMDT_VPPR_ROTATE90:
+        {
+            *pPixelPitch = -((LONG)pBltInfo->Pitch);
+            *pRowPitch = (pBltInfo->BitsPerPel / BITS_PER_BYTE);
+            return;
+        }
+        case D3DKMDT_VPPR_ROTATE180:
+        {
+            *pPixelPitch = -((LONG)pBltInfo->BitsPerPel / BITS_PER_BYTE);
+            *pRowPitch = -((LONG)pBltInfo->Pitch);
+            return;
+        }
+        case D3DKMDT_VPPR_ROTATE270:
+        {
+            *pPixelPitch = pBltInfo->Pitch;
+            *pRowPitch = -((LONG)pBltInfo->BitsPerPel / BITS_PER_BYTE);
+            return;
+        }
+        default:
+        {
+            QXL_LOG_ASSERTION1("Invalid rotation (0x%I64x) specified", pBltInfo->Rotation);
+            *pPixelPitch = 0;
+            *pRowPitch = 0;
+            return;
+        }
+    }
+}
+
+BYTE* GetRowStart(_In_ CONST BLT_INFO* pBltInfo, CONST RECT* pRect)
+{
+    BYTE* pRet = NULL;
+    LONG OffLeft = pRect->left + pBltInfo->Offset.x;
+    LONG OffTop = pRect->top + pBltInfo->Offset.y;
+    LONG BytesPerPixel = (pBltInfo->BitsPerPel / BITS_PER_BYTE);
+    switch (pBltInfo->Rotation)
+    {
+        case D3DKMDT_VPPR_IDENTITY:
+        {
+            pRet = ((BYTE*)pBltInfo->pBits +
+                           OffTop * pBltInfo->Pitch +
+                           OffLeft * BytesPerPixel);
+            break;
+        }
+        case D3DKMDT_VPPR_ROTATE90:
+        {
+            pRet = ((BYTE*)pBltInfo->pBits +
+                           (pBltInfo->Height - 1 - OffLeft) * pBltInfo->Pitch +
+                           OffTop * BytesPerPixel);
+            break;
+        }
+        case D3DKMDT_VPPR_ROTATE180:
+        {
+            pRet = ((BYTE*)pBltInfo->pBits +
+                           (pBltInfo->Height - 1 - OffTop) * pBltInfo->Pitch +
+                           (pBltInfo->Width - 1 - OffLeft) * BytesPerPixel);
+            break;
+        }
+        case D3DKMDT_VPPR_ROTATE270:
+        {
+            pRet = ((BYTE*)pBltInfo->pBits +
+                           OffLeft * pBltInfo->Pitch +
+                           (pBltInfo->Width - 1 - OffTop) * BytesPerPixel);
+            break;
+        }
+        default:
+        {
+            QXL_LOG_ASSERTION1("Invalid rotation (0x%I64x) specified", pBltInfo->Rotation);
+            break;
+        }
+    }
+
+    return pRet;
+}
+
+/****************************Internal*Routine******************************\
+ * CopyBitsGeneric
+ *
+ *
+ * Blt function which can handle a rotated dst/src, offset rects in dst/src
+ * and bpp combinations of:
+ *   dst | src
+ *    32 | 32   // For identity rotation this is much faster in CopyBits32_32
+ *    32 | 24
+ *    32 | 16
+ *    24 | 32
+ *    16 | 32
+ *     8 | 32
+ *    24 | 24   // untested
+ *
+\**************************************************************************/
+
+VOID CopyBitsGeneric(
+    BLT_INFO* pDst,
+    CONST BLT_INFO* pSrc,
+    UINT  NumRects,
+    _In_reads_(NumRects) CONST RECT *pRects)
+{
+    LONG DstPixelPitch = 0;
+    LONG DstRowPitch = 0;
+    LONG SrcPixelPitch = 0;
+    LONG SrcRowPitch = 0;
+
+    DbgPrint(TRACE_LEVEL_VERBOSE , ("---> %s NumRects = %d Dst = %p Src = %p\n", __FUNCTION__, NumRects, pDst->pBits, pSrc->pBits));
+
+    GetPitches(pDst, &DstPixelPitch, &DstRowPitch);
+    GetPitches(pSrc, &SrcPixelPitch, &SrcRowPitch);
+
+    for (UINT iRect = 0; iRect < NumRects; iRect++)
+    {
+        CONST RECT* pRect = &pRects[iRect];
+
+        NT_ASSERT(pRect->right >= pRect->left);
+        NT_ASSERT(pRect->bottom >= pRect->top);
+
+        UINT NumPixels = pRect->right - pRect->left;
+        UINT NumRows = pRect->bottom - pRect->top;
+
+        BYTE* pDstRow = GetRowStart(pDst, pRect);
+        CONST BYTE* pSrcRow = GetRowStart(pSrc, pRect);
+
+        for (UINT y=0; y < NumRows; y++)
+        {
+            BYTE* pDstPixel = pDstRow;
+            CONST BYTE* pSrcPixel = pSrcRow;
+
+            for (UINT x=0; x < NumPixels; x++)
+            {
+                if ((pDst->BitsPerPel == 24) ||
+                    (pSrc->BitsPerPel == 24))
+                {
+                    pDstPixel[0] = pSrcPixel[0];
+                    pDstPixel[1] = pSrcPixel[1];
+                    pDstPixel[2] = pSrcPixel[2];
+                    // pPixel[3] is the alpha channel and is ignored for whichever of Src/Dst is 32bpp
+                }
+                else if (pDst->BitsPerPel == 32)
+                {
+                    if (pSrc->BitsPerPel == 32)
+                    {
+                        UINT32* pDstPixelAs32 = (UINT32*)pDstPixel;
+                        UINT32* pSrcPixelAs32 = (UINT32*)pSrcPixel;
+                        *pDstPixelAs32 = *pSrcPixelAs32;
+                    }
+                    else if (pSrc->BitsPerPel == 16)
+                    {
+                        UINT32* pDstPixelAs32 = (UINT32*)pDstPixel;
+                        UINT16* pSrcPixelAs16 = (UINT16*)pSrcPixel;
+
+                        *pDstPixelAs32 = CONVERT_16BPP_TO_32BPP(*pSrcPixelAs16);
+                    }
+                    else
+                    {
+                        // Invalid pSrc->BitsPerPel on a pDst->BitsPerPel of 32
+                        NT_ASSERT(FALSE);
+                    }
+                }
+                else if (pDst->BitsPerPel == 16)
+                {
+                    NT_ASSERT(pSrc->BitsPerPel == 32);
+
+                    UINT16* pDstPixelAs16 = (UINT16*)pDstPixel;
+                    *pDstPixelAs16 = CONVERT_32BPP_TO_16BPP(pSrcPixel);
+                }
+                else if (pDst->BitsPerPel == 8)
+                {
+                    NT_ASSERT(pSrc->BitsPerPel == 32);
+
+                    *pDstPixel = CONVERT_32BPP_TO_8BPP(pSrcPixel);
+                }
+                else
+                {
+                    // Invalid pDst->BitsPerPel
+                    NT_ASSERT(FALSE);
+                }
+                pDstPixel += DstPixelPitch;
+                pSrcPixel += SrcPixelPitch;
+            }
+
+            pDstRow += DstRowPitch;
+            pSrcRow += SrcRowPitch;
+        }
+    }
+}
+
+
+VOID CopyBits32_32(
+    BLT_INFO* pDst,
+    CONST BLT_INFO* pSrc,
+    UINT  NumRects,
+    _In_reads_(NumRects) CONST RECT *pRects)
+{
+    NT_ASSERT((pDst->BitsPerPel == 32) &&
+              (pSrc->BitsPerPel == 32));
+    NT_ASSERT((pDst->Rotation == D3DKMDT_VPPR_IDENTITY) &&
+              (pSrc->Rotation == D3DKMDT_VPPR_IDENTITY));
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+
+    for (UINT iRect = 0; iRect < NumRects; iRect++)
+    {
+        CONST RECT* pRect = &pRects[iRect];
+
+        NT_ASSERT(pRect->right >= pRect->left);
+        NT_ASSERT(pRect->bottom >= pRect->top);
+
+        UINT NumPixels = pRect->right - pRect->left;
+        UINT NumRows = pRect->bottom - pRect->top;
+        UINT BytesToCopy = NumPixels * 4;
+        BYTE* pStartDst = ((BYTE*)pDst->pBits +
+                          (pRect->top + pDst->Offset.y) * pDst->Pitch +
+                          (pRect->left + pDst->Offset.x) * 4);
+        CONST BYTE* pStartSrc = ((BYTE*)pSrc->pBits +
+                                (pRect->top + pSrc->Offset.y) * pSrc->Pitch +
+                                (pRect->left + pSrc->Offset.x) * 4);
+
+        for (UINT i = 0; i < NumRows; ++i)
+        {
+            RtlCopyMemory(pStartDst, pStartSrc, BytesToCopy);
+            pStartDst += pDst->Pitch;
+            pStartSrc += pSrc->Pitch;
+        }
+    }
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+}
+
+
+VOID BltBits (
+    BLT_INFO* pDst,
+    CONST BLT_INFO* pSrc,
+    UINT  NumRects,
+    _In_reads_(NumRects) CONST RECT *pRects)
+{
+    // pSrc->pBits might be coming from user-mode. User-mode addresses when accessed by kernel need to be protected by a __try/__except.
+    // This usage is redundant in the sample driver since it is already being used for MmProbeAndLockPages. However, it is very important
+    // to have this in place and to make sure developers don't miss it, it is in these two locations.
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    __try
+    {
+        if (pDst->BitsPerPel == 32 &&
+            pSrc->BitsPerPel == 32 &&
+            pDst->Rotation == D3DKMDT_VPPR_IDENTITY &&
+            pSrc->Rotation == D3DKMDT_VPPR_IDENTITY)
+        {
+            // This is by far the most common copy function being called
+            CopyBits32_32(pDst, pSrc, NumRects, pRects);
+        }
+        else
+        {
+            CopyBitsGeneric(pDst, pSrc, NumRects, pRects);
+        }
+    }
+    #pragma prefast(suppress: __WARNING_EXCEPTIONEXECUTEHANDLER, "try/except is only able to protect against user-mode errors and these are the only errors we try to catch here");
+    __except(EXCEPTION_EXECUTE_HANDLER)
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("Either dst (0x%I64x) or src (0x%I64x) bits encountered exception during access.\n", pDst->pBits, pSrc->pBits));
+    }
+}
 
 VgaDevice::VgaDevice(_In_ QxlDod* pQxlDod)
 {
@@ -2692,7 +2483,7 @@ NTSTATUS VgaDevice::SetCurrentMode(ULONG Mode)
         DbgPrint(TRACE_LEVEL_ERROR, ("x86BiosCall failed\n"));
         return STATUS_UNSUCCESSFUL;
     }
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
     return Status;
 }
 
@@ -2729,7 +2520,7 @@ NTSTATUS VgaDevice::HWClose(void)
 
 NTSTATUS VgaDevice::SetPowerState(POWER_ACTION ActionType)
 {
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
 
     X86BIOS_REGISTERS regs = {0};
     regs.Eax = 0x4F10;
@@ -2748,8 +2539,266 @@ NTSTATUS VgaDevice::SetPowerState(POWER_ACTION ActionType)
         DbgPrint(TRACE_LEVEL_ERROR, ("x86BiosCall failed\n"));
         return STATUS_UNSUCCESSFUL;
     }
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
+}
+
+
+NTSTATUS
+VgaDevice::ExecutePresentDisplayOnly(
+    _In_ BYTE*             DstAddr,
+    _In_ UINT              DstBitPerPixel,
+    _In_ BYTE*             SrcAddr,
+    _In_ UINT              SrcBytesPerPixel,
+    _In_ LONG              SrcPitch,
+    _In_ ULONG             NumMoves,
+    _In_ D3DKMT_MOVE_RECT* Moves,
+    _In_ ULONG             NumDirtyRects,
+    _In_ RECT*             DirtyRect,
+    _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation,
+    _In_ const CURRENT_BDD_MODE* pModeCur)
+/*++
+
+  Routine Description:
+
+    The method creates present worker thread and provides context
+    for it filled with present commands
+
+  Arguments:
+
+    DstAddr - address of destination surface
+    DstBitPerPixel - color depth of destination surface
+    SrcAddr - address of source surface
+    SrcBytesPerPixel - bytes per pixel of source surface
+    SrcPitch - source surface pitch (bytes in a row)
+    NumMoves - number of moves to be copied
+    Moves - moves' data
+    NumDirtyRects - number of rectangles to be copied
+    DirtyRect - rectangles' data
+    Rotation - roatation to be performed when executing copy
+    CallBack - callback for present worker thread to report execution status
+
+  Return Value:
+
+    Status
+
+--*/
+{
+
+    PAGED_CODE();
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    SIZE_T sizeMoves = NumMoves*sizeof(D3DKMT_MOVE_RECT);
+    SIZE_T sizeRects = NumDirtyRects*sizeof(RECT);
+    SIZE_T size = sizeof(DoPresentMemory) + sizeMoves + sizeRects;
+
+    DoPresentMemory* ctx = reinterpret_cast<DoPresentMemory*>
+                                (new (NonPagedPoolNx) BYTE[size]);
+
+    if (!ctx)
+    {
+        return STATUS_NO_MEMORY;
+    }
+
+    RtlZeroMemory(ctx,size);
+
+//    const CURRENT_BDD_MODE* pModeCur = &m_CurrentModes[0];
+    ctx->DstAddr          = DstAddr;
+    ctx->DstBitPerPixel   = DstBitPerPixel;
+    ctx->DstStride        = pModeCur->DispInfo.Pitch;
+    ctx->SrcWidth         = pModeCur->SrcModeWidth;
+    ctx->SrcHeight        = pModeCur->SrcModeHeight;
+    ctx->SrcAddr          = NULL;
+    ctx->SrcPitch         = SrcPitch;
+    ctx->Rotation         = Rotation;
+    ctx->NumMoves         = NumMoves;
+    ctx->Moves            = Moves;
+    ctx->NumDirtyRects    = NumDirtyRects;
+    ctx->DirtyRect        = DirtyRect;
+//    ctx->SourceID         = m_SourceId;
+//    ctx->hAdapter         = m_DevExt;
+    ctx->Mdl              = NULL;
+    ctx->DisplaySource    = this;
+
+    // Alternate between synch and asynch execution, for demonstrating 
+    // that a real hardware implementation can do either
+
+    {
+        // Map Source into kernel space, as Blt will be executed by system worker thread
+        UINT sizeToMap = SrcBytesPerPixel * ctx->SrcWidth * ctx->SrcHeight;
+
+        PMDL mdl = IoAllocateMdl((PVOID)SrcAddr, sizeToMap,  FALSE, FALSE, NULL);
+        if(!mdl)
+        {
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+
+        KPROCESSOR_MODE AccessMode = static_cast<KPROCESSOR_MODE>(( SrcAddr <=
+                        (BYTE* const) MM_USER_PROBE_ADDRESS)?UserMode:KernelMode);
+        __try
+        {
+            // Probe and lock the pages of this buffer in physical memory.
+            // We need only IoReadAccess.
+            MmProbeAndLockPages(mdl, AccessMode, IoReadAccess);
+        }
+        #pragma prefast(suppress: __WARNING_EXCEPTIONEXECUTEHANDLER, "try/except is only able to protect against user-mode errors and these are the only errors we try to catch here");
+        __except(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = GetExceptionCode();
+            IoFreeMdl(mdl);
+            return Status;
+        }
+
+        // Map the physical pages described by the MDL into system space.
+        // Note: double mapping the buffer this way causes lot of system
+        // overhead for large size buffers.
+        ctx->SrcAddr = reinterpret_cast<BYTE*>
+            (MmGetSystemAddressForMdlSafe(mdl, NormalPagePriority ));
+
+        if(!ctx->SrcAddr) {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            MmUnlockPages(mdl);
+            IoFreeMdl(mdl);
+            return Status;
+        }
+
+        // Save Mdl to unmap and unlock the pages in worker thread
+        ctx->Mdl = mdl;
+    }
+
+    BYTE* rects = reinterpret_cast<BYTE*>(ctx+1);
+
+    // copy moves and update pointer
+    if (Moves)
+    {
+        memcpy(rects,Moves,sizeMoves);
+        ctx->Moves = reinterpret_cast<D3DKMT_MOVE_RECT*>(rects);
+        rects += sizeMoves;
+    }
+
+    // copy dirty rects and update pointer
+    if (DirtyRect)
+    {
+        memcpy(rects,DirtyRect,sizeRects);
+        ctx->DirtyRect = reinterpret_cast<RECT*>(rects);
+    }
+
+
+//    HwExecutePresentDisplayOnly((PVOID)ctx);
+
+
+    // Set up destination blt info
+    BLT_INFO DstBltInfo;
+    DstBltInfo.pBits = ctx->DstAddr;
+    DstBltInfo.Pitch = ctx->DstStride;
+    DstBltInfo.BitsPerPel = ctx->DstBitPerPixel;
+    DstBltInfo.Offset.x = 0;
+    DstBltInfo.Offset.y = 0;
+    DstBltInfo.Rotation = ctx->Rotation;
+    DstBltInfo.Width = ctx->SrcWidth;
+    DstBltInfo.Height = ctx->SrcHeight;
+
+    // Set up source blt info
+    BLT_INFO SrcBltInfo;
+    SrcBltInfo.pBits = ctx->SrcAddr;
+    SrcBltInfo.Pitch = ctx->SrcPitch;
+    SrcBltInfo.BitsPerPel = 32;
+    SrcBltInfo.Offset.x = 0;
+    SrcBltInfo.Offset.y = 0;
+    SrcBltInfo.Rotation = D3DKMDT_VPPR_IDENTITY;
+    if (ctx->Rotation == D3DKMDT_VPPR_ROTATE90 ||
+        ctx->Rotation == D3DKMDT_VPPR_ROTATE270)
+    {
+        SrcBltInfo.Width = DstBltInfo.Height;
+        SrcBltInfo.Height = DstBltInfo.Width;
+    }
+    else
+    {
+        SrcBltInfo.Width = DstBltInfo.Width;
+        SrcBltInfo.Height = DstBltInfo.Height;
+    }
+
+
+    // Copy all the scroll rects from source image to video frame buffer.
+    for (UINT i = 0; i < ctx->NumMoves; i++)
+    {
+        BltBits(&DstBltInfo,
+        &SrcBltInfo,
+        1, // NumRects
+        &ctx->Moves[i].DestRect);
+    }
+
+    // Copy all the dirty rects from source image to video frame buffer.
+    for (UINT i = 0; i < ctx->NumDirtyRects; i++)
+    {
+
+        BltBits(&DstBltInfo,
+        &SrcBltInfo,
+        1, // NumRects
+        &ctx->DirtyRect[i]);
+    }
+
+    // Unmap unmap and unlock the pages.
+    if (ctx->Mdl)
+    {
+        MmUnlockPages(ctx->Mdl);
+        IoFreeMdl(ctx->Mdl);
+    }
+    delete [] reinterpret_cast<BYTE*>(ctx);
+
+    return STATUS_SUCCESS;
+}
+
+VOID VgaDevice::BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod)
+{
+    PAGED_CODE();
+
+    UINT ScreenHeight = pCurrentBddMod->DispInfo.Height;
+    UINT ScreenPitch = pCurrentBddMod->DispInfo.Pitch;
+
+    PHYSICAL_ADDRESS NewPhysAddrStart = pCurrentBddMod->DispInfo.PhysicAddress;
+    PHYSICAL_ADDRESS NewPhysAddrEnd;
+    NewPhysAddrEnd.QuadPart = NewPhysAddrStart.QuadPart + (ScreenHeight * ScreenPitch);
+
+    if (pCurrentBddMod->Flags.FrameBufferIsActive)
+    {
+        BYTE* MappedAddr = reinterpret_cast<BYTE*>(pCurrentBddMod->FrameBuffer.Ptr);
+
+        // Zero any memory at the start that hasn't been zeroed recently
+        if (NewPhysAddrStart.QuadPart < pCurrentBddMod->ZeroedOutStart.QuadPart)
+        {
+            if (NewPhysAddrEnd.QuadPart < pCurrentBddMod->ZeroedOutStart.QuadPart)
+            {
+                // No overlap
+                RtlZeroMemory(MappedAddr, ScreenHeight * ScreenPitch);
+            }
+            else
+            {
+                RtlZeroMemory(MappedAddr, (UINT)(pCurrentBddMod->ZeroedOutStart.QuadPart - NewPhysAddrStart.QuadPart));
+            }
+        }
+
+        // Zero any memory at the end that hasn't been zeroed recently
+        if (NewPhysAddrEnd.QuadPart > pCurrentBddMod->ZeroedOutEnd.QuadPart)
+        {
+            if (NewPhysAddrStart.QuadPart > pCurrentBddMod->ZeroedOutEnd.QuadPart)
+            {
+                // No overlap
+                // NOTE: When actual pixels were the most recent thing drawn, ZeroedOutStart & ZeroedOutEnd will both be 0
+                // and this is the path that will be used to black out the current screen.
+                RtlZeroMemory(MappedAddr, ScreenHeight * ScreenPitch);
+            }
+            else
+            {
+                RtlZeroMemory(MappedAddr, (UINT)(NewPhysAddrEnd.QuadPart - pCurrentBddMod->ZeroedOutEnd.QuadPart));
+            }
+        }
+    }
+
+    pCurrentBddMod->ZeroedOutStart.QuadPart = NewPhysAddrStart.QuadPart;
+    pCurrentBddMod->ZeroedOutEnd.QuadPart = NewPhysAddrEnd.QuadPart;
 }
 
 QxlDevice::QxlDevice(_In_ QxlDod* pQxlDod)
@@ -2822,32 +2871,36 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
         return STATUS_UNSUCCESSFUL;
     }
 
+    DbgPrint(TRACE_LEVEL_ERROR, ("%s: ModeCount = %d\n", __FUNCTION__, ModeCount));
+
     ModeCount += 2;
     m_ModeInfo = reinterpret_cast<PVIDEO_MODE_INFORMATION> (new (PagedPool) BYTE[sizeof (VIDEO_MODE_INFORMATION) * ModeCount]);
     m_ModeNumbers = reinterpret_cast<PUSHORT> (new (PagedPool)  BYTE [sizeof (USHORT) * ModeCount]);
     m_CurrentMode = 0;
 
+    UINT Height = pDispInfo->Height;
+    UINT Width = pDispInfo->Width;
+//    UINT BitsPerPixel = BPPFromPixelFormat(pDispInfo->ColorFormat);
     for (CurrentMode = 0, SuitableModeCount = 0;
          CurrentMode < ModeCount;
          CurrentMode++)
     {
 
-        UINT Height = pDispInfo->Height;
-        UINT Width = pDispInfo->Width;
-        UINT BitsPerPixel = BPPFromPixelFormat(pDispInfo->ColorFormat);
         QXLMode* tmpModeInfo = &modes->modes[CurrentMode];
 
+        DbgPrint(TRACE_LEVEL_ERROR, ("%s: modes[%d] x_res = %d, y_res = %d, bits = %d\n", __FUNCTION__, CurrentMode, tmpModeInfo->x_res, tmpModeInfo->y_res, tmpModeInfo->bits));
+
         if (tmpModeInfo->x_res >= Width &&
-            tmpModeInfo->y_res >= Height &&
-            tmpModeInfo->bits == BitsPerPixel)
+            tmpModeInfo->y_res >= Height/* &&
+            tmpModeInfo->bits == BitsPerPixel*/)
         {
-            m_ModeNumbers[SuitableModeCount] = (USHORT)SuitableModeCount;
+            m_ModeNumbers[SuitableModeCount] = CurrentMode;
             SetVideoModeInfo(SuitableModeCount, tmpModeInfo);
-            if (tmpModeInfo->x_res == 1024 &&
-                tmpModeInfo->y_res == 768)
-            {
-                m_CurrentMode = (USHORT)SuitableModeCount;
-            }
+//            if (tmpModeInfo->x_res == 1024 &&
+//                tmpModeInfo->y_res == 768)
+//            {
+//                m_CurrentMode = (USHORT)SuitableModeCount;
+//            }
             SuitableModeCount++;
         }
     }
@@ -2858,6 +2911,7 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
         Status = STATUS_UNSUCCESSFUL;
     }
 
+    m_CurrentMode = m_ModeNumbers[0];
     m_ModeCount = SuitableModeCount;
     DbgPrint(TRACE_LEVEL_ERROR, ("ModeCount filtered %d\n", m_ModeCount));
     for (ULONG idx = 0; idx < m_ModeCount; idx++)
@@ -3044,8 +3098,8 @@ NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
     Status = GetModeList(pDispInfo);
     if (!NT_SUCCESS(Status))
     {
-        QXL_LOG_ASSERTION1("GetModeList failed with status 0x%X\n",
-                           Status);
+        DbgPrint(TRACE_LEVEL_ERROR, ("GetModeList failed with status 0x%X\n",
+                           Status));
         return Status;
     }
 
@@ -3168,6 +3222,40 @@ void QxlDevice::ResetDevice(void)
 {
     m_RamHdr->int_mask = ~0;
     WRITE_PORT_UCHAR(m_IoBase + QXL_IO_MEMSLOT_ADD, 0);
+}
+
+
+NTSTATUS
+QxlDevice::ExecutePresentDisplayOnly(
+    _In_ BYTE*             DstAddr,
+    _In_ UINT              DstBitPerPixel,
+    _In_ BYTE*             SrcAddr,
+    _In_ UINT              SrcBytesPerPixel,
+    _In_ LONG              SrcPitch,
+    _In_ ULONG             NumMoves,
+    _In_ D3DKMT_MOVE_RECT* Moves,
+    _In_ ULONG             NumDirtyRects,
+    _In_ RECT*             DirtyRect,
+    _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation,
+    _In_ const CURRENT_BDD_MODE* pModeCur)
+{
+
+    PAGED_CODE();
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+
+    NTSTATUS Status = STATUS_SUCCESS;
+    return Status;
+}
+
+VOID QxlDevice::BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod)
+{
+    PAGED_CODE();
+
+    UINT ScreenHeight = pCurrentBddMod->DispInfo.Height;
+    UINT ScreenPitch = pCurrentBddMod->DispInfo.Pitch;
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+
 }
 
 NTSTATUS QxlDevice::HWClose(void)

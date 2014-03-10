@@ -210,7 +210,7 @@ class HwDeviceIntrface :
     public BaseObject
 {
 public:
-//    HwDeviceIntrface(_In_ QxlDod* pQxlDod);
+//    HwDeviceIntrface(_In_ QxlDod* pQxlDod) {m_pQxlDod = pQxlDod;}
 //    virtual ~HwDeviceIntrface(void);
     virtual NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode) = 0;
     virtual NTSTATUS SetCurrentMode(ULONG Mode) = 0;
@@ -223,7 +223,41 @@ public:
     USHORT GetModeNumber(USHORT idx) {return m_ModeNumbers[idx];}
     USHORT GetCurrentModeIndex(void) {return m_CurrentMode;}
     VOID SetCurrentModeIndex(USHORT idx) {m_CurrentMode = idx;}
+    virtual NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
+                                 _In_ UINT              DstBitPerPixel,
+                                 _In_ BYTE*             SrcAddr,
+                                 _In_ UINT              SrcBytesPerPixel,
+                                 _In_ LONG              SrcPitch,
+                                 _In_ ULONG             NumMoves,
+                                 _In_ D3DKMT_MOVE_RECT* pMoves,
+                                 _In_ ULONG             NumDirtyRects,
+                                 _In_ RECT*             pDirtyRect,
+                                 _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation,
+                                 _In_ const CURRENT_BDD_MODE* pModeCur) = 0;
+
+    virtual VOID BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod) = 0;
 protected:
+/*
+    BYTE* GetRowStart(_In_ CONST BLT_INFO* pBltInfo, CONST RECT* pRect);
+    VOID GetPitches(_In_ CONST BLT_INFO* pBltInfo, _Out_ LONG* pPixelPitch, _Out_ LONG* pRowPitch);
+
+    VOID CopyBitsGeneric(
+                                  BLT_INFO* pDst,
+                                  CONST BLT_INFO* pSrc,
+                                  UINT  NumRects,
+                                 _In_reads_(NumRects) CONST RECT *pRects);
+
+    VOID CopyBits32_32(
+                                 BLT_INFO* pDst,
+                                 CONST BLT_INFO* pSrc,
+                                 UINT  NumRects,
+                                 _In_reads_(NumRects) CONST RECT *pRects);
+    VOID BltBits (
+                                 BLT_INFO* pDst,
+                                 CONST BLT_INFO* pSrc,
+                                 UINT  NumRects,
+                                 _In_reads_(NumRects) CONST RECT *pRects);
+*/
     virtual NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
 protected:
     QxlDod* m_pQxlDod;
@@ -245,6 +279,18 @@ public:
     NTSTATUS SetPowerState(POWER_ACTION ActionType);
     NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWClose(void);
+    NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
+                                 _In_ UINT              DstBitPerPixel,
+                                 _In_ BYTE*             SrcAddr,
+                                 _In_ UINT              SrcBytesPerPixel,
+                                 _In_ LONG              SrcPitch,
+                                 _In_ ULONG             NumMoves,
+                                 _In_ D3DKMT_MOVE_RECT* pMoves,
+                                 _In_ ULONG             NumDirtyRects,
+                                 _In_ RECT*             pDirtyRect,
+                                 _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation,
+                                 _In_ const CURRENT_BDD_MODE* pModeCur);
+    VOID BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod);
 protected:
     NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
 private:
@@ -272,6 +318,18 @@ public:
     NTSTATUS SetPowerState(POWER_ACTION ActionType);
     NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWClose(void);
+    NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
+                                 _In_ UINT              DstBitPerPixel,
+                                 _In_ BYTE*             SrcAddr,
+                                 _In_ UINT              SrcBytesPerPixel,
+                                 _In_ LONG              SrcPitch,
+                                 _In_ ULONG             NumMoves,
+                                 _In_ D3DKMT_MOVE_RECT* pMoves,
+                                 _In_ ULONG             NumDirtyRects,
+                                 _In_ RECT*             pDirtyRect,
+                                 _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation,
+                                 _In_ const CURRENT_BDD_MODE* pModeCur);
+    VOID BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod);
 protected:
     NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
 private:
@@ -434,6 +492,7 @@ public:
     PDXGKRNL_INTERFACE GetDxgkInterrface(void) { return &m_DxgkInterface;}
 private:
     VOID CleanUp(VOID);
+    NTSTATUS CheckHardware();
     NTSTATUS WriteHWInfoStr(_In_ HANDLE DevInstRegKeyHandle, _In_ PCWSTR pszwValueName, _In_ PCSTR pszValue);
     // Set the given source mode on the given path
     NTSTATUS SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMode,
@@ -458,42 +517,12 @@ private:
 
 
     NTSTATUS RegisterHWInfo();
-
-    NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
-                                 _In_ UINT              DstBitPerPixel,
-                                 _In_ BYTE*             SrcAddr,
-                                 _In_ UINT              SrcBytesPerPixel,
-                                 _In_ LONG              SrcPitch,
-                                 _In_ ULONG             NumMoves,
-                                 _In_ D3DKMT_MOVE_RECT* pMoves,
-                                 _In_ ULONG             NumDirtyRects,
-                                 _In_ RECT*             pDirtyRect,
-                                 _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation);
-    BYTE* GetRowStart(_In_ CONST BLT_INFO* pBltInfo, CONST RECT* pRect);
-    VOID GetPitches(_In_ CONST BLT_INFO* pBltInfo, _Out_ LONG* pPixelPitch, _Out_ LONG* pRowPitch);
-    VOID CopyBitsGeneric(
-                                  BLT_INFO* pDst,
-                                  CONST BLT_INFO* pSrc,
-                                  UINT  NumRects,
-                                 _In_reads_(NumRects) CONST RECT *pRects);
-
-    VOID CopyBits32_32(
-                                 BLT_INFO* pDst,
-                                 CONST BLT_INFO* pSrc,
-                                 UINT  NumRects,
-                                 _In_reads_(NumRects) CONST RECT *pRects);
-    VOID BltBits (
-                                 BLT_INFO* pDst,
-                                 CONST BLT_INFO* pSrc,
-                                 UINT  NumRects,
-                                 _In_reads_(NumRects) CONST RECT *pRects);
-    VOID BlackOutScreen(D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId);
 };
 
 NTSTATUS
 MapFrameBuffer(
-    _In_                       PHYSICAL_ADDRESS    PhysicalAddress,
-    _In_                       ULONG               Length,
+    _In_                PHYSICAL_ADDRESS    PhysicalAddress,
+    _In_                ULONG               Length,
     _Outptr_result_bytebuffer_(Length) VOID**              VirtualAddress);
 
 NTSTATUS
@@ -501,6 +530,25 @@ UnmapFrameBuffer(
     _In_reads_bytes_(Length) VOID* VirtualAddress,
     _In_                ULONG Length);
 
-
 UINT BPPFromPixelFormat(D3DDDIFORMAT Format);
 D3DDDIFORMAT PixelFormatFromBPP(UINT BPP);
+
+VOID CopyBitsGeneric(
+                        BLT_INFO* pDst,
+                        CONST BLT_INFO* pSrc,
+                        UINT  NumRects,
+                        _In_reads_(NumRects) CONST RECT *pRects);
+
+VOID CopyBits32_32(
+                        BLT_INFO* pDst,
+                        CONST BLT_INFO* pSrc,
+                        UINT  NumRects,
+                        _In_reads_(NumRects) CONST RECT *pRects);
+VOID BltBits (
+                        BLT_INFO* pDst,
+                        CONST BLT_INFO* pSrc,
+                        UINT  NumRects,
+                        _In_reads_(NumRects) CONST RECT *pRects);
+
+BYTE* GetRowStart(_In_ CONST BLT_INFO* pBltInfo, CONST RECT* pRect);
+VOID GetPitches(_In_ CONST BLT_INFO* pBltInfo, _Out_ LONG* pPixelPitch, _Out_ LONG* pRowPitch);
