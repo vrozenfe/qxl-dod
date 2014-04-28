@@ -1,6 +1,7 @@
 #pragma once
 #include "baseobject.h"
 #include "qxl_dev.h"
+#include "mspace.h"
 
 #define MAX_CHILDREN               1
 #define MAX_VIEWS                  1
@@ -306,6 +307,85 @@ typedef struct _MemSlot {
     QXLPHYSICAL high_bits;
 } MemSlot;
 
+typedef struct MspaceInfo {
+    mspace _mspace;
+    UINT8 *mspace_start;
+    UINT8 *mspace_end;
+} MspaceInfo;
+
+enum {
+    MSPACE_TYPE_DEVRAM,
+    MSPACE_TYPE_VRAM,
+
+    NUM_MSPACES,
+};
+
+#define RELEASE_RES(res) if (!--(res)->refs) (res)->free(res);
+#define GET_RES(res) (++(res)->refs)
+
+/* Debug helpers - tag each resource with this enum */
+enum {
+    RESOURCE_TYPE_DRAWABLE = 1,
+    RESOURCE_TYPE_SURFACE,
+    RESOURCE_TYPE_PATH,
+    RESOURCE_TYPE_CLIP_RECTS,
+    RESOURCE_TYPE_QUIC_IMAGE,
+    RESOURCE_TYPE_BITMAP_IMAGE,
+    RESOURCE_TYPE_SURFACE_IMAGE,
+    RESOURCE_TYPE_SRING,
+    RESOURCE_TYPE_CURSOR,
+    RESOURCE_TYPE_BUF,
+    RESOURCE_TYPE_UPDATE,
+};
+
+#ifdef DBG
+#define RESOURCE_TYPE(res, val) do { res->type = val; } while (0)
+#else
+#define RESOURCE_TYPE(res, val)
+#endif
+
+typedef struct Resource Resource;
+struct Resource {
+    UINT32 refs;
+    void* ptr;
+#ifdef DBG
+    UINT32 type;
+#endif
+    void (*free)(Resource *res);
+    UINT8 res[0];
+};
+
+#define TIMEOUT_TO_MS               ((LONGLONG) 1 * 10 * 1000)
+
+#define WAIT_FOR_EVENT(event, timeout) do {             \
+    NTSTATUS status;                                    \
+        status = KeWaitForSingleObject (                \
+                &event,                                 \
+                Executive,                              \
+                KernelMode,                             \
+                FALSE,                                  \
+                timeout);                               \
+        ASSERT(NT_SUCCESS(status));                     \
+} while (0);
+
+#define QXL_SLEEP(msec) do {                        \
+    LARGE_INTEGER timeout;                              \
+    timeout.QuadPart = -msec * TIMEOUT_TO_MS;           \
+    KeDelayExecutionThread (KernelMode, FALSE, &timeout);\
+} while (0);
+
+
+#define MAX_OUTPUT_RES 6
+
+typedef struct QXLOutput {
+    UINT32 num_res;
+#ifdef DBG
+    UINT32 type;
+#endif
+    Resource *resources[MAX_OUTPUT_RES];
+    UINT8 data[0];
+} QXLOutput;
+
 class QxlDevice  :
     public HwDeviceIntrface
 {
@@ -332,17 +412,44 @@ public:
     VOID BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod);
 protected:
     NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
+    VOID BltBits (
+                                 BLT_INFO* pDst,
+                                 CONST BLT_INFO* pSrc,
+                                 UINT  NumRects,
+                                 _In_reads_(NumRects) CONST RECT *pRects);
+    QXLDrawable *Drawable(
+                                 UINT8 type,
+                                 CONST RECT *area,
+                                 CONST RECT *clip,
+                                  UINT32 surface_id);
+    QXLDrawable *GetDrawable();
+    void *AllocMem(UINT32 mspace_type, size_t size, BOOL force);
 private:
     void UnmapMemory(void);
     BOOL SetVideoModeInfo(UINT Idx, QXLMode* pModeInfo);
     BOOL InitMemSlots(void);
     BOOL CreateMemSlots(void);
     void DestroyMemSlots(void);
+    void CreatePrimarySurface(PVIDEO_MODE_INFORMATION pModeInfo);
+    void DestroyPrimarySurface(void);
     void ResetDevice(void);
     void SetupHWSlot(UINT8 Idx, MemSlot *pSlot);
     UINT8 SetupMemSlot(UINT8 Idx, QXLPHYSICAL start, QXLPHYSICAL end);
-    BOOL CreateEvents();
-    BOOL CreateRings();
+    BOOL CreateEvents(void);
+    BOOL CreateRings(void);
+    UINT64 VA(QXLPHYSICAL paddr, UINT8 slot_id);
+    QXLPHYSICAL PA(PVOID virt, UINT8 slot_id);
+    void InitDeviceMemoryResources(void);
+    void InitMspace(UINT32 mspace_type, UINT8 *start, size_t capacity);
+    void FlushReleaseRing();
+    void FreeMem(UINT32 mspace_type, void *ptr);
+    UINT64 ReleaseOutput(UINT64 output_id);
+    void WaitForReleaseRing(void);
+    BOOL SetClip(const RECT *clip, QXLDrawable *drawable);
+    void AddRes(QXLOutput *output, Resource *res);
+    void DrawableAddRes(QXLDrawable *drawable, Resource *res);
+    void FreeClipRects(Resource *res);
+    void static FreeClipRectsEx(Resource *res);
 private:
     PUCHAR m_IoBase;
     BOOLEAN m_IoMapped;
@@ -378,6 +485,12 @@ private:
 
     PUCHAR m_LogPort;
     PUCHAR m_LogBuf;
+
+    KSPIN_LOCK m_MemLock;
+    MspaceInfo m_MSInfo[NUM_MSPACES];
+
+    UINT64 free_outputs;
+
 };
 
 class QxlDod :
@@ -517,6 +630,37 @@ private:
 
 
     NTSTATUS RegisterHWInfo();
+/*
+    NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
+                                 _In_ UINT              DstBitPerPixel,
+                                 _In_ BYTE*             SrcAddr,
+                                 _In_ UINT              SrcBytesPerPixel,
+                                 _In_ LONG              SrcPitch,
+                                 _In_ ULONG             NumMoves,
+                                 _In_ D3DKMT_MOVE_RECT* pMoves,
+                                 _In_ ULONG             NumDirtyRects,
+                                 _In_ RECT*             pDirtyRect,
+                                 _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation);
+    BYTE* GetRowStart(_In_ CONST BLT_INFO* pBltInfo, CONST RECT* pRect);
+    VOID GetPitches(_In_ CONST BLT_INFO* pBltInfo, _Out_ LONG* pPixelPitch, _Out_ LONG* pRowPitch);
+    VOID CopyBitsGeneric(
+                                  BLT_INFO* pDst,
+                                  CONST BLT_INFO* pSrc,
+                                  UINT  NumRects,
+                                 _In_reads_(NumRects) CONST RECT *pRects);
+
+    VOID CopyBits32_32(
+                                 BLT_INFO* pDst,
+                                 CONST BLT_INFO* pSrc,
+                                 UINT  NumRects,
+                                 _In_reads_(NumRects) CONST RECT *pRects);
+    VOID BltBits (
+                                 BLT_INFO* pDst,
+                                 CONST BLT_INFO* pSrc,
+                                 UINT  NumRects,
+                                 _In_reads_(NumRects) CONST RECT *pRects);
+    VOID BlackOutScreen(D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId);
+*/
 };
 
 NTSTATUS
@@ -532,6 +676,7 @@ UnmapFrameBuffer(
 
 UINT BPPFromPixelFormat(D3DDDIFORMAT Format);
 D3DDDIFORMAT PixelFormatFromBPP(UINT BPP);
+UINT SpiceFromPixelFormat(D3DDDIFORMAT Format);
 
 VOID CopyBitsGeneric(
                         BLT_INFO* pDst,

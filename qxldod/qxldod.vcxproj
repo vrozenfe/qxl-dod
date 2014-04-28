@@ -156,6 +156,7 @@
   <ItemGroup>
     <ClCompile Include="BaseObject.cpp" />
     <ClCompile Include="driver.cpp" />
+    <ClCompile Include="mspace.c" />
     <ClCompile Include="QxlDod.cpp" />
   </ItemGroup>
   <ItemGroup>
