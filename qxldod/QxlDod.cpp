@@ -1640,22 +1640,21 @@ NTSTATUS QxlDod::UpdateActiveVidPnPresentPath(_In_ CONST DXGKARG_UPDATEACTIVEVID
 VOID QxlDod::DpcRoutine(VOID)
 {
     DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
+    m_pHWDevice->DpcRoutine();
     m_DxgkInterface.DxgkCbNotifyDpc((HANDLE)m_DxgkInterface.DeviceHandle);
     DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
 }
 
 BOOLEAN QxlDod::InterruptRoutine(_In_  ULONG MessageNumber)
 {
-    UNREFERENCED_PARAMETER(MessageNumber);
-
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("---> 0 %s\n", __FUNCTION__));
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
-    return TRUE;
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("<--> 0 %s\n", __FUNCTION__));
+    return m_pHWDevice->InterruptRoutine(&m_DxgkInterface, MessageNumber);
 }
 
 VOID QxlDod::ResetDevice(VOID)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
+    m_pHWDevice->ResetDevice();
 }
 
 // Must be Non-Paged, as it sets up the display for a bugcheck
@@ -2724,21 +2723,30 @@ VgaDevice::ExecutePresentDisplayOnly(
     // Copy all the scroll rects from source image to video frame buffer.
     for (UINT i = 0; i < ctx->NumMoves; i++)
     {
+        POINT*   pSourcePoint = &ctx->Moves[i].SourcePoint;
+        RECT*    pDestRect = &ctx->Moves[i].DestRect;
+
+//        DbgPrint(TRACE_LEVEL_FATAL, ("--- %d SourcePoint.x = %ld, SourcePoint.y = %ld, DestRect.bottom = %ld, DestRect.left = %ld, DestRect.right = %ld, DestRect.top = %ld\n", 
+//            i , pSourcePoint->x, pSourcePoint->y, pDestRect->bottom, pDestRect->left, pDestRect->right, pDestRect->top));
+
         BltBits(&DstBltInfo,
         &SrcBltInfo,
         1, // NumRects
-        &ctx->Moves[i].DestRect);
+        pDestRect);
     }
 
     // Copy all the dirty rects from source image to video frame buffer.
     for (UINT i = 0; i < ctx->NumDirtyRects; i++)
     {
+        RECT*    pDirtyRect = &ctx->DirtyRect[i];
+//        DbgPrint(TRACE_LEVEL_FATAL, ("--- %d pDirtyRect->bottom = %ld, pDirtyRect->left = %ld, pDirtyRect->right = %ld, pDirtyRect->top = %ld\n", 
+//            i, pDirtyRect->bottom, pDirtyRect->left, pDirtyRect->right, pDirtyRect->top));
 
         BltBits(&DstBltInfo,
         &SrcBltInfo,
         1, // NumRects
-        &ctx->DirtyRect[i]);
-    }
+        pDirtyRect);
+    } 
 
     // Unmap unmap and unlock the pages.
     if (ctx->Mdl)
@@ -2801,6 +2809,21 @@ VOID VgaDevice::BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod)
     pCurrentBddMod->ZeroedOutEnd.QuadPart = NewPhysAddrEnd.QuadPart;
 }
 
+BOOLEAN VgaDevice::InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber)
+{
+    UNREFERENCED_PARAMETER(pDxgkInterface);
+    UNREFERENCED_PARAMETER(MessageNumber);
+    return FALSE;
+}
+
+VOID VgaDevice::DpcRoutine(VOID)
+{
+}
+
+VOID VgaDevice::ResetDevice(VOID)
+{
+}
+
 QxlDevice::QxlDevice(_In_ QxlDod* pQxlDod)
 {
     m_pQxlDod = pQxlDod;
@@ -2808,6 +2831,8 @@ QxlDevice::QxlDevice(_In_ QxlDod* pQxlDod)
     m_ModeCount = 0;
     m_ModeNumbers = NULL;
     m_CurrentMode = 0;
+    m_FreeOutputs = 0;
+    m_Pending = 0;
 }
 
 QxlDevice::~QxlDevice(void)
@@ -3113,7 +3138,10 @@ NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
 
     CreateEvents();
     CreateRings();
+    WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_RESET), 0);
+    m_RamHdr->int_mask = QXL_INTERRUPT_MASK;
     CreateMemSlots();
+    InitDeviceMemoryResources();
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
@@ -3148,6 +3176,7 @@ void QxlDevice::UnmapMemory(void)
 
 BOOL QxlDevice::InitMemSlots(void)
 {
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     m_NumMemSlots = m_RomHdr->slots_end;
     m_SlotGenBits = m_RomHdr->slot_gen_bits;
     m_SlotIdBits = m_RomHdr->slot_id_bits;
@@ -3160,18 +3189,22 @@ BOOL QxlDevice::InitMemSlots(void)
         RtlZeroMemory(m_MemSlots, size);
         return TRUE;
     }
+    DbgPrint(TRACE_LEVEL_ERROR, ("---> %s Failed to init mem slot\n", __FUNCTION__));
     return FALSE;
 }
 
 void QxlDevice::DestroyMemSlots(void)
 {
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     delete [] reinterpret_cast<BYTE*>(m_MemSlots);
     m_MemSlots = NULL;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
 void QxlDevice::CreatePrimarySurface(PVIDEO_MODE_INFORMATION pModeInfo)
 {
     QXLSurfaceCreate *primary_surface_create;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     primary_surface_create = &m_RamHdr->create_surface;
     primary_surface_create->format = pModeInfo->BitsPerPlane;
     primary_surface_create->width = pModeInfo->VisScreenWidth;
@@ -3183,17 +3216,20 @@ void QxlDevice::CreatePrimarySurface(PVIDEO_MODE_INFORMATION pModeInfo)
     primary_surface_create->flags = QXL_SURF_FLAG_KEEP_DATA; //0;
     primary_surface_create->type = QXL_SURF_TYPE_PRIMARY;
     WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_CREATE_PRIMARY), 0);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
 void QxlDevice::DestroyPrimarySurface(void)
 {
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_DESTROY_PRIMARY), 0);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
 _inline QXLPHYSICAL QxlDevice::PA(PVOID virt, UINT8 slot_id)
 {
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s\n", __FUNCTION__));
     MemSlot *pSlot = &m_MemSlots[slot_id];;
-
     return pSlot->high_bits | ((UINT64)virt - pSlot->start_virt_addr);
 }
 
@@ -3202,6 +3238,7 @@ _inline UINT64 QxlDevice::VA(QXLPHYSICAL paddr, UINT8 slot_id)
     UINT64 virt;
     MemSlot *pSlot = &m_MemSlots[slot_id];;
 
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     virt = paddr & m_VaSlotMask;
     virt += pSlot->start_virt_addr;;
 
@@ -3210,13 +3247,16 @@ _inline UINT64 QxlDevice::VA(QXLPHYSICAL paddr, UINT8 slot_id)
 
 void QxlDevice::SetupHWSlot(UINT8 Idx, MemSlot *pSlot)
 {
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     m_RamHdr->mem_slot.mem_start = pSlot->start_phys_addr;
     m_RamHdr->mem_slot.mem_end = pSlot->end_phys_addr;
     WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_MEMSLOT_ADD), Idx);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 }
 
 BOOL QxlDevice::CreateEvents()
 {
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     KeInitializeEvent(&m_DisplayEvent,
                       SynchronizationEvent,
                       FALSE);
@@ -3228,14 +3268,17 @@ BOOL QxlDevice::CreateEvents()
                       FALSE);
     KeInitializeSpinLock(&m_MemLock);
 
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return TRUE;
 }
 
 BOOL QxlDevice::CreateRings()
 {
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     m_CommandRing = &(m_RamHdr->cmd_ring);
     m_CursorRing = &(m_RamHdr->cursor_ring);
     m_ReleaseRing = &(m_RamHdr->release_ring);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return TRUE;
 }
 
@@ -3245,6 +3288,7 @@ UINT8 QxlDevice::SetupMemSlot(UINT8 Idx, QXLPHYSICAL start, QXLPHYSICAL end)
     MemSlot *pSlot;
     UINT8 slot_index;
 
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     slot_index = m_RomHdr->slots_start + Idx;
     pSlot = &m_MemSlots[slot_index];
     pSlot->start_phys_addr = start;
@@ -3257,33 +3301,42 @@ UINT8 QxlDevice::SetupMemSlot(UINT8 Idx, QXLPHYSICAL start, QXLPHYSICAL end)
     high_bits |= pSlot->generation;
     high_bits <<= (64 - (m_SlotGenBits + m_SlotIdBits));
     pSlot->high_bits = high_bits;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return slot_index;
 }
 
 BOOL QxlDevice::CreateMemSlots(void)
 {
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     m_MainMemSlot= SetupMemSlot(0, (QXLPHYSICAL)m_VRamStart, (QXLPHYSICAL)(m_VRamStart + m_RomHdr->ram_header_offset));
     m_SurfaceMemSlot = SetupMemSlot(1, (QXLPHYSICAL)m_RamStart, (QXLPHYSICAL)(m_RamStart + m_RamSize));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return TRUE;
 }
 
 void QxlDevice::InitDeviceMemoryResources(void)
 {
-    InitMspace(MSPACE_TYPE_DEVRAM, (m_RamStart + m_RomHdr->surface0_area_size), (size_t)((m_VRamPA.QuadPart + m_RomHdr->surface0_area_size) * PAGE_SIZE));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s num_pages = %d\n", __FUNCTION__, m_RomHdr->num_pages));
+    InitMspace(MSPACE_TYPE_DEVRAM, (m_RamStart + m_RomHdr->surface0_area_size), (size_t)(/*(m_VRamPA.QuadPart + m_RomHdr->surface0_area_size)*/m_RomHdr->num_pages * PAGE_SIZE));
     InitMspace(MSPACE_TYPE_VRAM, m_VRamStart, m_VRamSize);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
 void QxlDevice::InitMspace(UINT32 mspace_type, UINT8 *start, size_t capacity)
 {
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s type = %d, start = %p, capacity = %d\n", __FUNCTION__, mspace_type, start, capacity));
     m_MSInfo[mspace_type]._mspace = create_mspace_with_base(start, capacity, 0, this);
     m_MSInfo[mspace_type].mspace_start = start;
     m_MSInfo[mspace_type].mspace_end = start + capacity;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s _mspace = %p\n", __FUNCTION__, m_MSInfo[mspace_type]._mspace));
 }
 
 void QxlDevice::ResetDevice(void)
 {
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     m_RamHdr->int_mask = ~0;
     WRITE_PORT_UCHAR(m_IoBase + QXL_IO_MEMSLOT_ADD, 0);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
 
@@ -3439,26 +3492,26 @@ QxlDevice::ExecutePresentDisplayOnly(
         POINT*   pSourcePoint = &ctx->Moves[i].SourcePoint;
         RECT*    pDestRect = &ctx->Moves[i].DestRect;
 
-        DbgPrint(TRACE_LEVEL_FATAL, ("--- %d SourcePoint.x = %d, SourcePoint.y = %d, DestRect.bottom = %d, DestRect.left = %d, DestRect.right = %d, DestRect.top = %d\n", 
+        DbgPrint(TRACE_LEVEL_FATAL, ("--- %d SourcePoint.x = %ld, SourcePoint.y = %ld, DestRect.bottom = %ld, DestRect.left = %ld, DestRect.right = %ld, DestRect.top = %ld\n", 
             i , pSourcePoint->x, pSourcePoint->y, pDestRect->bottom, pDestRect->left, pDestRect->right, pDestRect->top));
 
         BltBits(&DstBltInfo,
         &SrcBltInfo,
         1, // NumRects
-        &ctx->Moves[i].DestRect);
+        pDestRect);
     }
 
     // Copy all the dirty rects from source image to video frame buffer.
     for (UINT i = 0; i < ctx->NumDirtyRects; i++)
     {
         RECT*    pDirtyRect = &ctx->DirtyRect[i];
-        DbgPrint(TRACE_LEVEL_FATAL, ("--- %d pDirtyRect->bottom = %d, pDirtyRect->left = %d, pDirtyRect->right = %d, pDirtyRect->top = %d\n", 
+        DbgPrint(TRACE_LEVEL_FATAL, ("--- %d pDirtyRect->bottom = %ld, pDirtyRect->left = %ld, pDirtyRect->right = %ld, pDirtyRect->top = %ld\n", 
             i, pDirtyRect->bottom, pDirtyRect->left, pDirtyRect->right, pDirtyRect->top));
 
         BltBits(&DstBltInfo,
         &SrcBltInfo,
         1, // NumRects
-        &ctx->DirtyRect[i]);
+        pDirtyRect);
     }
 
     // Unmap unmap and unlock the pages.
@@ -3502,7 +3555,7 @@ void QxlDevice::WaitForReleaseRing(void)
 {
     int wait;
 
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("%s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("--->%s\n", __FUNCTION__));
 
     for (;;) {
         LARGE_INTEGER timeout;
@@ -3527,7 +3580,7 @@ void QxlDevice::WaitForReleaseRing(void)
             WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_NOTIFY_OOM), 0);
         }
     }
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("%s: done\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("%s: <---\n", __FUNCTION__));
 }
 
 
@@ -3537,7 +3590,9 @@ void QxlDevice::FlushReleaseRing()
     int notify;
     int num_to_release = 50;
 
-    output = free_outputs;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+
+    output = m_FreeOutputs;
 
     while (1) {
         while (output != 0) {
@@ -3556,7 +3611,8 @@ void QxlDevice::FlushReleaseRing()
         SPICE_RING_POP(m_ReleaseRing, notify);
     }
 
-    free_outputs = output;
+    m_FreeOutputs = output;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
 UINT64 QxlDevice::ReleaseOutput(UINT64 output_id)
@@ -3567,15 +3623,14 @@ UINT64 QxlDevice::ReleaseOutput(UINT64 output_id)
     UINT64 next;
 
     ASSERT(output_id);
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("%s 0x%x\n", __FUNCTION__, output));
-//    DebugShowOutput(pdev, output);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("--->%s 0x%x\n", __FUNCTION__, output));
 
     for (now = output->resources, end = now + output->num_res; now < end; now++) {
         RELEASE_RES(*now);
     }
     next = *(UINT64*)output->data;
     FreeMem(MSPACE_TYPE_DEVRAM, output);
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("%s done\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---%s\n", __FUNCTION__));
     return next;
 }
 
@@ -3585,7 +3640,7 @@ void *QxlDevice::AllocMem(UINT32 mspace_type, size_t size, BOOL force)
     KIRQL old_irql;
 
     ASSERT(m_MSInfo[mspace_type]._mspace);
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("%s: %p(%d) size %u\n", __FUNCTION__,
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("--->%s: %p(%d) size %u\n", __FUNCTION__,
         m_MSInfo[mspace_type]._mspace,
         mspace_footprint(m_MSInfo[mspace_type]._mspace),
         size));
@@ -3605,7 +3660,7 @@ void *QxlDevice::AllocMem(UINT32 mspace_type, size_t size, BOOL force)
             break;
         }
 
-        if (free_outputs != 0 ||
+        if (m_FreeOutputs != 0 ||
             !SPICE_RING_IS_EMPTY(m_ReleaseRing)) {
             /* We have more things to free, try that */
             continue;
@@ -3622,7 +3677,7 @@ void *QxlDevice::AllocMem(UINT32 mspace_type, size_t size, BOOL force)
 
     ASSERT((!ptr && !force) || (ptr >= m_MSInfo[mspace_type].mspace_start &&
                                       ptr < m_MSInfo[mspace_type].mspace_end));
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("%s: done 0x%x\n", __FUNCTION__, ptr));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---%s: ptr 0x%x\n", __FUNCTION__, ptr));
     return ptr;
 }
 
@@ -3630,6 +3685,8 @@ void QxlDevice::FreeMem(UINT32 mspace_type, void *ptr)
 {
     KIRQL old_irql;
     ASSERT(m_MSInfo[mspace_type]._mspace);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+
 #ifdef DBG
     if (!((UINT8 *)ptr >= m_MSInfo[mspace_type].mspace_start &&
                  (UINT8 *)ptr < m_MSInfo[mspace_type].mspace_end)) {
@@ -3641,6 +3698,7 @@ void QxlDevice::FreeMem(UINT32 mspace_type, void *ptr)
     old_irql = AcquireSpinLock(&m_MemLock);
     mspace_free(m_MSInfo[mspace_type]._mspace, ptr);
     ReleaseSpinLock(&m_MemLock, old_irql);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
 
@@ -3652,7 +3710,7 @@ QXLDrawable *QxlDevice::GetDrawable()
     output->num_res = 0;
     RESOURCE_TYPE(output, RESOURCE_TYPE_DRAWABLE);
     ((QXLDrawable *)output->data)->release_info.id = (UINT64)output;
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("%s 0x%x\n", __FUNCTION__, output));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s 0x%x\n", __FUNCTION__, output));
     return(QXLDrawable *)output->data;
 }
 
@@ -3705,9 +3763,11 @@ void QxlDevice::FreeClipRectsEx(Resource *res)
     QxlDevice* pqxl = (QxlDevice*)res->ptr;
     pqxl->FreeClipRects(res);
 }
+
 void QxlDevice::FreeClipRects(Resource *res)
 {
     QXLPHYSICAL chunk_phys;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
     chunk_phys = ((QXLClipRects *)res->res)->chunk.next_chunk;
     while (chunk_phys) {
@@ -3716,6 +3776,32 @@ void QxlDevice::FreeClipRects(Resource *res)
         FreeMem(MSPACE_TYPE_DEVRAM, chunk);
     }
     FreeMem(MSPACE_TYPE_DEVRAM, res);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+}
+
+void QxlDevice::FreeBitmapImageEx(Resource *res)
+{
+    QxlDevice* pqxl = (QxlDevice*)res->ptr;
+    pqxl->FreeBitmapImage(res);
+}
+
+void QxlDevice::FreeBitmapImage(Resource *res)
+{
+    InternalImage *internal;
+    QXLPHYSICAL chunk_phys;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+
+    internal = (InternalImage *)res->res;
+
+    chunk_phys = ((QXLDataChunk *)(&internal->image.bitmap + 1))->next_chunk;
+    while (chunk_phys) {
+        QXLDataChunk *chunk = (QXLDataChunk *)VA(chunk_phys, m_MainMemSlot);
+        chunk_phys = chunk->next_chunk;
+        FreeMem(MSPACE_TYPE_DEVRAM, chunk);
+    }
+
+    FreeMem(MSPACE_TYPE_DEVRAM, res);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
 QXLDrawable *QxlDevice::Drawable(UINT8 type, CONST RECT *area, CONST RECT *clip, UINT32 surface_id)
@@ -3723,6 +3809,7 @@ QXLDrawable *QxlDevice::Drawable(UINT8 type, CONST RECT *area, CONST RECT *clip,
     QXLDrawable *drawable;
 
     ASSERT(area);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
     drawable = GetDrawable();
     drawable->surface_id = surface_id;
@@ -3740,9 +3827,21 @@ QXLDrawable *QxlDevice::Drawable(UINT8 type, CONST RECT *area, CONST RECT *clip,
         ReleaseOutput(drawable->release_info.id);
         drawable = NULL;
     }
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return drawable;
 }
 
+void QxlDevice::PushDrawable(QXLDrawable *drawable) {
+    QXLCommand *cmd;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+
+    WaitForCmdRing();
+    cmd = SPICE_RING_PROD_ITEM(m_CommandRing);
+    cmd->type = QXL_CMD_DRAW;
+    cmd->data = PA(drawable, m_MainMemSlot);
+    PushCmd();
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+}
 
 VOID QxlDevice::BltBits (
     BLT_INFO* pDst,
@@ -3751,16 +3850,149 @@ VOID QxlDevice::BltBits (
     _In_reads_(NumRects) CONST RECT *pRects)
 {
     QXLDrawable *drawable;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
     if (!(drawable = Drawable(QXL_DRAW_COPY, pRects, NULL, 0))) {
         DbgPrint(TRACE_LEVEL_ERROR, ("Cannot get Drawable.\n"));
     }
 
-    for (UINT iRect = 0; iRect < NumRects; iRect++)
-    {
-        CONST RECT* pRect = &pRects[iRect];
+    drawable->effect = QXL_EFFECT_OPAQUE;
+    drawable->u.copy.scale_mode = SPICE_IMAGE_SCALE_MODE_NEAREST;
+    drawable->u.copy.mask.bitmap = 0;
+    drawable->u.copy.rop_descriptor = SPICE_ROPD_OP_PUT;
+
+    CONST RECT* pRect = &pRects[0];
+    drawable->u.copy.src_area.top = pRect->top;
+    drawable->u.copy.src_area.bottom = pRect->bottom;
+    drawable->u.copy.src_area.left = pRect->left;
+    drawable->u.copy.src_area.right = pRect->right;
+
+    CopyRect(&drawable->u.copy.src_area, pRect);
+
+    drawable->surfaces_dest[0] = 0;
+    drawable->surfaces_rects[0].left = pRect->left;
+    drawable->surfaces_rects[0].right = pRect->right;
+    drawable->surfaces_rects[0].top =  pRect->top;
+    drawable->surfaces_rects[0].bottom = pRect->bottom;
+
+    drawable->self_bitmap = TRUE;
+    drawable->self_bitmap_area.bottom = pRect->bottom;
+    drawable->self_bitmap_area.left = pRect->left;
+    drawable->self_bitmap_area.top = pRect->top;
+    drawable->self_bitmap_area.right = pRect->right;
+
+    Resource *image_res;
+    InternalImage *internal;
+    size_t alloc_size;
+    QXLDataChunk *chunk;
+    UINT32 line_size;
+    LONG width;
+    LONG height;
+
+    height = pRect->bottom - pRect->top;
+    width = pRect->right - pRect->left;
+    line_size = width * 4;
+
+    alloc_size = BITMAP_ALLOC_BASE + BITS_BUF_MAX - BITS_BUF_MAX % line_size;
+    alloc_size = MIN(BITMAP_ALLOC_BASE + height * line_size, alloc_size);
+    image_res = (Resource*)AllocMem(MSPACE_TYPE_DEVRAM, alloc_size, TRUE);
+
+    image_res->refs = 1;
+    image_res->free = FreeBitmapImageEx;
+
+    internal = (InternalImage *)image_res->res;
+//FIXME
+//    SetImageId(internal, FALSE, width, height, SPICE_BITMAP_FMT_32BIT, 0);
+    internal->image.descriptor.flags = 0;
+    internal->image.descriptor.type = SPICE_IMAGE_TYPE_BITMAP;
+    chunk = (QXLDataChunk *)(&internal->image.bitmap + 1);
+    chunk->data_size = 0;
+    chunk->prev_chunk = 0;
+    chunk->next_chunk = 0;
+    internal->image.bitmap.data = PA(chunk, m_MainMemSlot);
+    internal->image.bitmap.flags = 0;
+    internal->image.descriptor.width = internal->image.bitmap.x = width;
+    internal->image.descriptor.height = internal->image.bitmap.y = height;
+    internal->image.bitmap.format = SPICE_BITMAP_FMT_RGBA;
+    internal->image.bitmap.stride = line_size;
+
+    UINT8* src = (UINT8*)pSrc->pBits+
+                                (pRect->top) * pSrc->Pitch +
+                                (pRect->left * 4);
+    UINT8* src_end = src - pSrc->Pitch;
+    src += pSrc->Pitch * (height - 1);
+    UINT8* dest = chunk->data;
+    UINT8* dest_end = (UINT8 *)image_res + alloc_size;
+    alloc_size = height * line_size;
+
+    for (; src != src_end; src -= pSrc->Pitch, alloc_size -= line_size) {
+        PutBytesAlign(&chunk, &dest, &dest_end, src,
+                      line_size, alloc_size, line_size);
     }
+
+//GetPallette
+    internal->image.bitmap.palette = 0;
+
+    drawable->u.copy.src_bitmap = PA(&internal->image, m_MainMemSlot);
+    DrawableAddRes(drawable, image_res);
+    RELEASE_RES(image_res);
+
+    DbgPrint(TRACE_LEVEL_FATAL, ("%s drawable= %p Dest right(%d) left(%d) top(%d) bottom(%d) src_bitmap= %p.\n", __FUNCTION__,
+         drawable, drawable->surfaces_rects[0].right, drawable->surfaces_rects[0].left,
+         drawable->surfaces_rects[0].top, drawable->surfaces_rects[0].bottom,
+         drawable->u.copy.src_bitmap));
+
+
+//    for (UINT iRect = 0; iRect < NumRects; iRect++)
+//    {
+//        CONST RECT* pRect = &pRects[iRect];
+//    }
+
+    PushDrawable(drawable);
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
+
+VOID QxlDevice::PutBytesAlign(QXLDataChunk **chunk_ptr, UINT8 **now_ptr,
+                            UINT8 **end_ptr, UINT8 *src, int size,
+                            size_t alloc_size, uint32_t alignment)
+{
+    QXLDataChunk *chunk = *chunk_ptr;
+    UINT8 *now = *now_ptr;
+    UINT8 *end = *end_ptr;
+    int offset;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+
+    while (size) {
+        int cp_size = (int)MIN(end - now, size);
+        if (!cp_size) {
+            size_t aligned_size;
+            aligned_size = (int)MIN(alloc_size + alignment - 1, BITS_BUF_MAX);
+            aligned_size -=  aligned_size % alignment;
+
+            void *ptr = AllocMem(MSPACE_TYPE_DEVRAM, size + sizeof(QXLDataChunk), TRUE);
+            chunk->next_chunk = PA(ptr, m_MainMemSlot);
+            ((QXLDataChunk *)ptr)->prev_chunk = PA(chunk, m_MainMemSlot);
+            chunk = (QXLDataChunk *)ptr;
+            chunk->data_size = 0;
+            chunk->next_chunk = 0;
+            now = chunk->data;
+            end = now + size;
+
+            cp_size = (int)MIN(end - now, size);
+        }
+        RtlCopyMemory(now, src, cp_size);
+        src += cp_size;
+        now += cp_size;
+        chunk->data_size += cp_size;
+        size -= cp_size;
+    }
+    *chunk_ptr = chunk;
+    *now_ptr = now;
+    *end_ptr = end;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+}
+
 
 VOID QxlDevice::BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod)
 {
@@ -3781,6 +4013,76 @@ NTSTATUS QxlDevice::HWClose(void)
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
 }
+
+VOID QxlDevice::WaitForCmdRing()
+{
+    int wait;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+
+    for (;;) {
+        SPICE_RING_PROD_WAIT(m_CommandRing, wait);
+
+        if (!wait) {
+            break;
+        }
+        WAIT_FOR_EVENT(m_DisplayEvent, NULL);
+    }
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+}
+
+VOID QxlDevice::PushCmd()
+{
+    int notify;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    SPICE_RING_PUSH(m_CommandRing, notify);
+    if (notify) {
+        WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_NOTIFY_CMD), 0);
+    }
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s notify = %d\n", __FUNCTION__, notify));
+}
+
+BOOLEAN QxlDevice::InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber)
+{
+    UNREFERENCED_PARAMETER(MessageNumber);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    if (!(m_RamHdr->int_pending & m_RamHdr->int_mask)) {
+        return FALSE;
+    }
+    m_RamHdr->int_mask = 0;
+    WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_UPDATE_IRQ), 0);
+    m_Pending |= m_RamHdr->int_pending;
+    m_RamHdr->int_pending = 0;
+
+    DXGKARGCB_NOTIFY_INTERRUPT_DATA  notifyInt;// = {0};
+    notifyInt.InterruptType = DXGK_INTERRUPT_DISPLAYONLY_PRESENT_PROGRESS;
+    notifyInt.DisplayOnlyPresentProgress.VidPnSourceId = 0;//FIXME pPath->VidPnSourceId;
+
+    pDxgkInterface->DxgkCbNotifyInterrupt(pDxgkInterface->DeviceHandle,&notifyInt);
+    if (!pDxgkInterface->DxgkCbQueueDpc(pDxgkInterface->DeviceHandle)) {
+        m_RamHdr->int_mask = QXL_INTERRUPT_MASK;
+        WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_UPDATE_IRQ), 0);
+    }
+    return TRUE;
+}
+
+VOID QxlDevice::DpcRoutine(VOID)
+{
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    m_RamHdr->int_mask = QXL_INTERRUPT_MASK;
+    WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_UPDATE_IRQ), 0);
+    if (m_Pending & QXL_INTERRUPT_DISPLAY) {
+        KeSetEvent (&m_DisplayEvent, IO_NO_INCREMENT, FALSE);
+    }
+    if (m_Pending & QXL_INTERRUPT_CURSOR) {
+        KeSetEvent (&m_CursorEvent, IO_NO_INCREMENT, FALSE);
+    }
+    if (m_Pending & QXL_INTERRUPT_IO_CMD) {
+        KeSetEvent (&m_IoCmdEvent, IO_NO_INCREMENT, FALSE);
+    }
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+}
+
 
 UINT BPPFromPixelFormat(D3DDDIFORMAT Format)
 {

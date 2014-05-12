@@ -219,6 +219,10 @@ public:
     virtual NTSTATUS SetPowerState(POWER_ACTION ActionType) = 0;
     virtual NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
     virtual NTSTATUS HWClose(void) = 0;
+    virtual BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber) = 0;
+    virtual VOID DpcRoutine(VOID) = 0;
+    virtual VOID ResetDevice(void) = 0;
+
     ULONG GetModeCount(void) {return m_ModeCount;}
     PVIDEO_MODE_INFORMATION GetModeInfo(UINT idx) {return &m_ModeInfo[idx];}
     USHORT GetModeNumber(USHORT idx) {return m_ModeNumbers[idx];}
@@ -238,27 +242,6 @@ public:
 
     virtual VOID BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod) = 0;
 protected:
-/*
-    BYTE* GetRowStart(_In_ CONST BLT_INFO* pBltInfo, CONST RECT* pRect);
-    VOID GetPitches(_In_ CONST BLT_INFO* pBltInfo, _Out_ LONG* pPixelPitch, _Out_ LONG* pRowPitch);
-
-    VOID CopyBitsGeneric(
-                                  BLT_INFO* pDst,
-                                  CONST BLT_INFO* pSrc,
-                                  UINT  NumRects,
-                                 _In_reads_(NumRects) CONST RECT *pRects);
-
-    VOID CopyBits32_32(
-                                 BLT_INFO* pDst,
-                                 CONST BLT_INFO* pSrc,
-                                 UINT  NumRects,
-                                 _In_reads_(NumRects) CONST RECT *pRects);
-    VOID BltBits (
-                                 BLT_INFO* pDst,
-                                 CONST BLT_INFO* pSrc,
-                                 UINT  NumRects,
-                                 _In_reads_(NumRects) CONST RECT *pRects);
-*/
     virtual NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
 protected:
     QxlDod* m_pQxlDod;
@@ -292,6 +275,9 @@ public:
                                  _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation,
                                  _In_ const CURRENT_BDD_MODE* pModeCur);
     VOID BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod);
+    BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
+    VOID DpcRoutine(VOID);
+    VOID ResetDevice(VOID);
 protected:
     NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
 private:
@@ -386,6 +372,32 @@ typedef struct QXLOutput {
     UINT8 data[0];
 } QXLOutput;
 
+typedef struct Ring RingItem;
+typedef struct Ring {
+    RingItem *prev;
+    RingItem *next;
+} Ring;
+
+typedef struct CacheImage {
+    struct CacheImage *next;
+    RingItem lru_link;
+    UINT32 key;
+    UINT32 hits;
+    UINT8 format;
+    UINT32 width;
+    UINT32 height;
+    struct InternalImage *image;
+} CacheImage;
+
+typedef struct InternalImage {
+    CacheImage *cache;
+    QXLImage image;
+} InternalImage;
+
+#define BITMAP_ALLOC_BASE (sizeof(Resource) + sizeof(InternalImage) + sizeof(QXLDataChunk))
+#define BITS_BUF_MAX (64 * 1024)
+#define MIN(x, y) (((x) <= (y)) ? (x) : (y))
+
 class QxlDevice  :
     public HwDeviceIntrface
 {
@@ -410,6 +422,9 @@ public:
                                  _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation,
                                  _In_ const CURRENT_BDD_MODE* pModeCur);
     VOID BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod);
+    BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
+    VOID DpcRoutine(VOID);
+    VOID ResetDevice(VOID);
 protected:
     NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
     VOID BltBits (
@@ -422,6 +437,7 @@ protected:
                                  CONST RECT *area,
                                  CONST RECT *clip,
                                   UINT32 surface_id);
+    void PushDrawable(QXLDrawable *drawable);
     QXLDrawable *GetDrawable();
     void *AllocMem(UINT32 mspace_type, size_t size, BOOL force);
 private:
@@ -432,7 +448,6 @@ private:
     void DestroyMemSlots(void);
     void CreatePrimarySurface(PVIDEO_MODE_INFORMATION pModeInfo);
     void DestroyPrimarySurface(void);
-    void ResetDevice(void);
     void SetupHWSlot(UINT8 Idx, MemSlot *pSlot);
     UINT8 SetupMemSlot(UINT8 Idx, QXLPHYSICAL start, QXLPHYSICAL end);
     BOOL CreateEvents(void);
@@ -450,6 +465,14 @@ private:
     void DrawableAddRes(QXLDrawable *drawable, Resource *res);
     void FreeClipRects(Resource *res);
     void static FreeClipRectsEx(Resource *res);
+    void FreeBitmapImage(Resource *res);
+    void static FreeBitmapImageEx(Resource *res);
+    void WaitForCmdRing(void);
+    void PushCmd(void);
+    void PutBytesAlign(QXLDataChunk **chunk_ptr, UINT8 **now_ptr,
+                            UINT8 **end_ptr, UINT8 *src, int size,
+                            size_t alloc_size, uint32_t alignment);
+
 private:
     PUCHAR m_IoBase;
     BOOLEAN m_IoMapped;
@@ -489,8 +512,8 @@ private:
     KSPIN_LOCK m_MemLock;
     MspaceInfo m_MSInfo[NUM_MSPACES];
 
-    UINT64 free_outputs;
-
+    UINT64 m_FreeOutputs;
+    UINT32 m_Pending;
 };
 
 class QxlDod :

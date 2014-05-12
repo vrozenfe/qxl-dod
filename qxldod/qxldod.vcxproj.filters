@@ -47,6 +47,9 @@
     <ClCompile Include="QxlDod.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="mspace.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="qxldod.rc">
