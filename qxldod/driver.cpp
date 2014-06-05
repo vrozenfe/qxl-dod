@@ -9,7 +9,7 @@
 // Driver Entry point
 //
 
-int nDebugLevel = TRACE_LEVEL_INFORMATION;
+int nDebugLevel = TRACE_LEVEL_ERROR;
 
 
 extern "C"
@@ -20,7 +20,7 @@ DriverEntry(
 {
     PAGED_CODE();
 
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("---> KMDOD build on on %s %s\n", __DATE__, __TIME__));
+    DbgPrint(TRACE_LEVEL_FATAL, ("---> KMDOD build on on %s %s\n", __DATE__, __TIME__));
 
 #ifdef DBG
 //    KdBreakPoint();

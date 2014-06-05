@@ -360,6 +360,9 @@ struct Resource {
     KeDelayExecutionThread (KernelMode, FALSE, &timeout);\
 } while (0);
 
+#define IMAGE_HASH_INIT_VAL(width, height, format) \
+    ((UINT32)((width) & 0x1FFF) | ((UINT32)((height) & 0x1FFF) << 13) |\
+     ((UINT32)(format) << 26))
 
 #define MAX_OUTPUT_RES 6
 
@@ -411,35 +414,39 @@ public:
     NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWClose(void);
     NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
-                                 _In_ UINT              DstBitPerPixel,
-                                 _In_ BYTE*             SrcAddr,
-                                 _In_ UINT              SrcBytesPerPixel,
-                                 _In_ LONG              SrcPitch,
-                                 _In_ ULONG             NumMoves,
-                                 _In_ D3DKMT_MOVE_RECT* pMoves,
-                                 _In_ ULONG             NumDirtyRects,
-                                 _In_ RECT*             pDirtyRect,
-                                 _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation,
-                                 _In_ const CURRENT_BDD_MODE* pModeCur);
+                    _In_ UINT              DstBitPerPixel,
+                    _In_ BYTE*             SrcAddr,
+                    _In_ UINT              SrcBytesPerPixel,
+                    _In_ LONG              SrcPitch,
+                    _In_ ULONG             NumMoves,
+                    _In_ D3DKMT_MOVE_RECT* pMoves,
+                    _In_ ULONG             NumDirtyRects,
+                    _In_ RECT*             pDirtyRect,
+                    _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation,
+                    _In_ const CURRENT_BDD_MODE* pModeCur);
     VOID BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod);
     BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
     VOID DpcRoutine(VOID);
     VOID ResetDevice(VOID);
 protected:
     NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
-    VOID BltBits (
-                                 BLT_INFO* pDst,
-                                 CONST BLT_INFO* pSrc,
-                                 UINT  NumRects,
-                                 _In_reads_(NumRects) CONST RECT *pRects);
-    QXLDrawable *Drawable(
-                                 UINT8 type,
-                                 CONST RECT *area,
-                                 CONST RECT *clip,
-                                  UINT32 surface_id);
+    VOID BltBits (BLT_INFO* pDst,
+                    CONST BLT_INFO* pSrc,
+                    UINT  NumRects,
+                    _In_reads_(NumRects) CONST RECT *pRects);
+    QXLDrawable *Drawable(UINT8 type,
+                    CONST RECT *area,
+                    CONST RECT *clip,
+                    UINT32 surface_id);
     void PushDrawable(QXLDrawable *drawable);
     QXLDrawable *GetDrawable();
     void *AllocMem(UINT32 mspace_type, size_t size, BOOL force);
+    VOID UpdateArea(RECTL *area, UINT32 surface_id);
+    VOID SetImageId(InternalImage *internal,
+                    BOOL cache_me,
+                    LONG width,
+                    LONG height,
+                    UINT8 format, UINT32 key);
 private:
     void UnmapMemory(void);
     BOOL SetVideoModeInfo(UINT Idx, QXLMode* pModeInfo);
@@ -449,7 +456,7 @@ private:
     void CreatePrimarySurface(PVIDEO_MODE_INFORMATION pModeInfo);
     void DestroyPrimarySurface(void);
     void SetupHWSlot(UINT8 Idx, MemSlot *pSlot);
-    UINT8 SetupMemSlot(UINT8 Idx, QXLPHYSICAL start, QXLPHYSICAL end);
+    UINT8 SetupMemSlot(UINT8 Idx, UINT64 pastart, UINT64 paend, UINT64 vastart, UINT64 vaend);
     BOOL CreateEvents(void);
     BOOL CreateRings(void);
     UINT64 VA(QXLPHYSICAL paddr, UINT8 slot_id);
