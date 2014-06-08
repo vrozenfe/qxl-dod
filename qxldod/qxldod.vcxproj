@@ -107,6 +107,7 @@
     </ResourceCompile>
     <ClCompile>
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(DDK_INC_PATH);$(SDK_INC_PATH);.\Include</AdditionalIncludeDirectories>
+      <WarningLevel>Level3</WarningLevel>
     </ClCompile>
     <PostBuildEvent>
       <Command>Inf2Cat /driver:$(OutDir) /os:8_X86</Command>
@@ -135,6 +136,7 @@
     </ResourceCompile>
     <ClCompile>
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(DDK_INC_PATH);$(SDK_INC_PATH);.\Include</AdditionalIncludeDirectories>
+      <WarningLevel>Level3</WarningLevel>
     </ClCompile>
     <PostBuildEvent>
       <Command>Inf2Cat /driver:$(OutDir) /os:8_X64</Command>
