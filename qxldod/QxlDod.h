@@ -211,8 +211,6 @@ class HwDeviceIntrface :
     public BaseObject
 {
 public:
-//    HwDeviceIntrface(_In_ QxlDod* pQxlDod) {m_pQxlDod = pQxlDod;}
-//    virtual ~HwDeviceIntrface(void);
     virtual NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode) = 0;
     virtual NTSTATUS SetCurrentMode(ULONG Mode) = 0;
     virtual NTSTATUS GetCurrentMode(ULONG* Mode) = 0;
@@ -220,7 +218,7 @@ public:
     virtual NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
     virtual NTSTATUS HWClose(void) = 0;
     virtual BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber) = 0;
-    virtual VOID DpcRoutine(VOID) = 0;
+    virtual VOID DpcRoutine(PVOID) = 0;
     virtual VOID ResetDevice(void) = 0;
 
     ULONG GetModeCount(void) {return m_ModeCount;}
@@ -276,7 +274,7 @@ public:
                                  _In_ const CURRENT_BDD_MODE* pModeCur);
     VOID BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod);
     BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
-    VOID DpcRoutine(VOID);
+    VOID DpcRoutine(PVOID);
     VOID ResetDevice(VOID);
 protected:
     NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
@@ -397,6 +395,13 @@ typedef struct InternalImage {
     QXLImage image;
 } InternalImage;
 
+
+
+typedef struct DpcCbContext {
+    void* ptr;
+    UINT32 data;
+} DPC_CB_CONTEXT,* PDPC_CB_CONTEXT;
+
 #define BITMAP_ALLOC_BASE (sizeof(Resource) + sizeof(InternalImage) + sizeof(QXLDataChunk))
 #define BITS_BUF_MAX (64 * 1024)
 #define MIN(x, y) (((x) <= (y)) ? (x) : (y))
@@ -426,7 +431,7 @@ public:
                     _In_ const CURRENT_BDD_MODE* pModeCur);
     VOID BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod);
     BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
-    VOID DpcRoutine(VOID);
+    VOID DpcRoutine(PVOID);
     VOID ResetDevice(VOID);
 protected:
     NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
@@ -479,6 +484,8 @@ private:
     void PutBytesAlign(QXLDataChunk **chunk_ptr, UINT8 **now_ptr,
                             UINT8 **end_ptr, UINT8 *src, int size,
                             size_t alloc_size, uint32_t alignment);
+    BOOLEAN static DpcCallbackEx(PVOID);
+    void DpcCallback(PDPC_CB_CONTEXT);
 
 private:
     PUCHAR m_IoBase;

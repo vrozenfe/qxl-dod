@@ -1640,7 +1640,7 @@ NTSTATUS QxlDod::UpdateActiveVidPnPresentPath(_In_ CONST DXGKARG_UPDATEACTIVEVID
 VOID QxlDod::DpcRoutine(VOID)
 {
     DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
-    m_pHWDevice->DpcRoutine();
+    m_pHWDevice->DpcRoutine(&m_DxgkInterface);
     m_DxgkInterface.DxgkCbNotifyDpc((HANDLE)m_DxgkInterface.DeviceHandle);
     DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
 }
@@ -2816,7 +2816,7 @@ BOOLEAN VgaDevice::InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_
     return FALSE;
 }
 
-VOID VgaDevice::DpcRoutine(VOID)
+VOID VgaDevice::DpcRoutine(PVOID)
 {
 }
 
@@ -4085,24 +4085,41 @@ BOOLEAN QxlDevice::InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_
     if (!pDxgkInterface->DxgkCbQueueDpc(pDxgkInterface->DeviceHandle)) {
         m_RamHdr->int_mask = QXL_INTERRUPT_MASK;
         WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_UPDATE_IRQ), 0);
+        DbgPrint(TRACE_LEVEL_FATAL, ("---> %s DxgkCbQueueDpc failed\n", __FUNCTION__));
     }
     return TRUE;
 }
 
-VOID QxlDevice::DpcRoutine(VOID)
+VOID QxlDevice::DpcRoutine(PVOID ptr)
 {
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
-    m_RamHdr->int_mask = QXL_INTERRUPT_MASK;
-    WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_UPDATE_IRQ), 0);
-    if (m_Pending & QXL_INTERRUPT_DISPLAY) {
+    PDXGKRNL_INTERFACE pDxgkInterface = (PDXGKRNL_INTERFACE)ptr;
+
+    DbgPrint(TRACE_LEVEL_FATAL, ("---> %s\n", __FUNCTION__));
+    DPC_CB_CONTEXT ctx;
+    BOOLEAN dummy;
+    ctx.ptr = this;
+    NTSTATUS Status = pDxgkInterface->DxgkCbSynchronizeExecution(
+            pDxgkInterface->DeviceHandle,
+            DpcCallbackEx,
+            &ctx,
+            0,
+            &dummy);
+    ASSERT(Status == STATUS_SUCCESS);
+
+    if (ctx.data & QXL_INTERRUPT_DISPLAY) {
+        DbgPrint(TRACE_LEVEL_FATAL, ("---> %s m_DisplayEvent\n", __FUNCTION__));
         KeSetEvent (&m_DisplayEvent, IO_NO_INCREMENT, FALSE);
     }
-    if (m_Pending & QXL_INTERRUPT_CURSOR) {
+    if (ctx.data & QXL_INTERRUPT_CURSOR) {
+        DbgPrint(TRACE_LEVEL_FATAL, ("---> %s m_CursorEvent\n", __FUNCTION__));
         KeSetEvent (&m_CursorEvent, IO_NO_INCREMENT, FALSE);
     }
-    if (m_Pending & QXL_INTERRUPT_IO_CMD) {
+    if (ctx.data & QXL_INTERRUPT_IO_CMD) {
+        DbgPrint(TRACE_LEVEL_FATAL, ("---> %s m_IoCmdEvent\n", __FUNCTION__));
         KeSetEvent (&m_IoCmdEvent, IO_NO_INCREMENT, FALSE);
     }
+    m_RamHdr->int_mask = QXL_INTERRUPT_MASK;
+    WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_UPDATE_IRQ), 0);
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
@@ -4116,6 +4133,21 @@ VOID QxlDevice::UpdateArea(RECTL *area, UINT32 surface_id)
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
+BOOLEAN QxlDevice:: DpcCallbackEx(PVOID ptr)
+{
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s\n", __FUNCTION__));
+    PDPC_CB_CONTEXT ctx = (PDPC_CB_CONTEXT) ptr;
+    QxlDevice* pqxl = (QxlDevice*)ctx->ptr;
+    pqxl->DpcCallback(ctx);
+    return TRUE;
+}
+
+VOID QxlDevice::DpcCallback(PDPC_CB_CONTEXT ctx)
+{
+    ctx->data = m_Pending;
+    m_Pending = 0;
+
+}
 
 UINT BPPFromPixelFormat(D3DDDIFORMAT Format)
 {
