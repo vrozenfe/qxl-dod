@@ -523,7 +523,9 @@ private:
     PUCHAR m_LogPort;
     PUCHAR m_LogBuf;
 
-    KSPIN_LOCK m_MemLock;
+    KMUTEX m_MemLock;
+    KMUTEX m_CmdLock;
+
     MspaceInfo m_MSInfo[NUM_MSPACES];
 
     UINT64 m_FreeOutputs;
