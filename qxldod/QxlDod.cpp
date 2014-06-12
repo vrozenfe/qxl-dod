@@ -2905,7 +2905,7 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
 
     UINT Height = pDispInfo->Height;
     UINT Width = pDispInfo->Width;
-//    UINT BitsPerPixel = BPPFromPixelFormat(pDispInfo->ColorFormat);
+    UINT BitsPerPixel = BPPFromPixelFormat(pDispInfo->ColorFormat);
     for (CurrentMode = 0, SuitableModeCount = 0;
          CurrentMode < ModeCount;
          CurrentMode++)
@@ -2913,11 +2913,11 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
 
         QXLMode* tmpModeInfo = &modes->modes[CurrentMode];
 
-        DbgPrint(TRACE_LEVEL_ERROR, ("%s: modes[%d] x_res = %d, y_res = %d, bits = %d\n", __FUNCTION__, CurrentMode, tmpModeInfo->x_res, tmpModeInfo->y_res, tmpModeInfo->bits));
+        DbgPrint(TRACE_LEVEL_ERROR, ("%s: modes[%d] x_res = %d, y_res = %d, bits = %d BitsPerPixel = %d\n", __FUNCTION__, CurrentMode, tmpModeInfo->x_res, tmpModeInfo->y_res, tmpModeInfo->bits, BitsPerPixel));
 
         if (tmpModeInfo->x_res >= Width &&
-            tmpModeInfo->y_res >= Height/* &&
-            tmpModeInfo->bits == BitsPerPixel*/)
+            tmpModeInfo->y_res >= Height &&
+            tmpModeInfo->bits == 32)
         {
             m_ModeNumbers[SuitableModeCount] = CurrentMode;
             SetVideoModeInfo(SuitableModeCount, tmpModeInfo);
