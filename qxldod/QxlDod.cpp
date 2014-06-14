@@ -4051,13 +4051,29 @@ VOID QxlDevice::PutBytesAlign(QXLDataChunk **chunk_ptr, UINT8 **now_ptr,
 
 VOID QxlDevice::BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod)
 {
+    QXLDrawable *drawable;
+    RECT Rect;
     PAGED_CODE();
 
-    UINT ScreenHeight = pCurrentBddMod->DispInfo.Height;
-    UINT ScreenPitch = pCurrentBddMod->DispInfo.Pitch;
+    DbgPrint(TRACE_LEVEL_FATAL, ("---> %s\n", __FUNCTION__));
+    Rect.bottom = pCurrentBddMod->SrcModeHeight;
+    Rect.top = 0;
+    Rect.left = 0;
+    Rect.right = pCurrentBddMod->SrcModeWidth;
+    if (!(drawable = Drawable(QXL_DRAW_FILL, &Rect, NULL, 0))) {
+        DbgPrint(TRACE_LEVEL_ERROR, ("Cannot get Drawable.\n"));
+    }
 
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    drawable->u.fill.brush.type = SPICE_BRUSH_TYPE_SOLID;
+    drawable->u.fill.brush.u.color = 0;
+    drawable->u.fill.rop_descriptor = SPICE_ROPD_OP_PUT;
+    drawable->u.fill.mask.flags = 0;
+    drawable->u.fill.mask.pos.x = 0;
+    drawable->u.fill.mask.pos.y = 0;
+    drawable->u.fill.mask.bitmap = 0;
+    PushDrawable(drawable);
 
+    DbgPrint(TRACE_LEVEL_FATAL, ("<--- %s\n", __FUNCTION__));
 }
 
 NTSTATUS QxlDevice::HWClose(void)
