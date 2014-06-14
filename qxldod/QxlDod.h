@@ -446,7 +446,7 @@ protected:
     void PushDrawable(QXLDrawable *drawable);
     QXLDrawable *GetDrawable();
     void *AllocMem(UINT32 mspace_type, size_t size, BOOL force);
-    VOID UpdateArea(RECTL *area, UINT32 surface_id);
+    VOID UpdateArea(CONST RECT* area, UINT32 surface_id);
     VOID SetImageId(InternalImage *internal,
                     BOOL cache_me,
                     LONG width,
@@ -486,7 +486,8 @@ private:
                             size_t alloc_size, uint32_t alignment);
     BOOLEAN static DpcCallbackEx(PVOID);
     void DpcCallback(PDPC_CB_CONTEXT);
-
+    void AsyncIo(UCHAR  Port, UCHAR Value);
+    void SyncIo(UCHAR  Port, UCHAR Value);
 private:
     PUCHAR m_IoBase;
     BOOLEAN m_IoMapped;
@@ -525,6 +526,7 @@ private:
 
     KMUTEX m_MemLock;
     KMUTEX m_CmdLock;
+    KMUTEX m_IoLock;
 
     MspaceInfo m_MSInfo[NUM_MSPACES];
 

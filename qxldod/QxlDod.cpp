@@ -3136,9 +3136,9 @@ NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
         return Status;
     }
 
+    WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_RESET), 0);
     CreateEvents();
     CreateRings();
-    WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_RESET), 0);
     m_RamHdr->int_mask = QXL_INTERRUPT_MASK;
     CreateMemSlots();
     InitDeviceMemoryResources();
@@ -3217,14 +3217,16 @@ void QxlDevice::CreatePrimarySurface(PVIDEO_MODE_INFORMATION pModeInfo)
     primary_surface_create->type = QXL_SURF_TYPE_PRIMARY;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s format = %d, width = %d, height = %d, stride = %d\n", __FUNCTION__, pModeInfo->BitsPerPlane, pModeInfo->VisScreenWidth, pModeInfo->VisScreenHeight,
                                      pModeInfo->ScreenStride));
-    WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_CREATE_PRIMARY), 0);
+//    AsyncIo(QXL_IO_CREATE_PRIMARY_ASYNC, 0);
+    SyncIo(QXL_IO_CREATE_PRIMARY, 0);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
 void QxlDevice::DestroyPrimarySurface(void)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
-    WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_DESTROY_PRIMARY), 0);
+//    AsyncIo(QXL_IO_DESTROY_PRIMARY_ASYNC, 0);
+    SyncIo(QXL_IO_DESTROY_PRIMARY, 0);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
@@ -3270,6 +3272,7 @@ BOOL QxlDevice::CreateEvents()
                       FALSE);
     KeInitializeMutex(&m_MemLock,1);
     KeInitializeMutex(&m_CmdLock,1);
+    KeInitializeMutex(&m_IoLock,1);
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return TRUE;
@@ -3283,6 +3286,37 @@ BOOL QxlDevice::CreateRings()
     m_ReleaseRing = &(m_RamHdr->release_ring);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return TRUE;
+}
+
+void QxlDevice::AsyncIo(UCHAR  Port, UCHAR Value)
+{
+    LARGE_INTEGER timeout;
+    KeWaitForSingleObject
+    (
+        &m_IoLock,
+        Executive,
+        KernelMode,
+        FALSE,
+        NULL
+    );
+    WRITE_PORT_UCHAR(m_IoBase + Port, Value);
+    timeout.QuadPart = -60000L * 1000 * 10;
+    WAIT_FOR_EVENT(m_IoCmdEvent, &timeout);
+    KeReleaseMutex(&m_IoLock,FALSE);
+}
+
+void QxlDevice::SyncIo(UCHAR  Port, UCHAR Value)
+{
+    KeWaitForSingleObject
+    (
+        &m_IoLock,
+        Executive,
+        KernelMode,
+        FALSE,
+        NULL
+    );
+    WRITE_PORT_UCHAR(m_IoBase + Port, Value);
+    KeReleaseMutex(&m_IoLock,FALSE);
 }
 
 UINT8 QxlDevice::SetupMemSlot(UINT8 Idx, UINT64 pastart, UINT64 paend, UINT64 vastart, UINT64 vaend)
@@ -3555,7 +3589,7 @@ void QxlDevice::WaitForReleaseRing(void)
             if (!SPICE_RING_IS_EMPTY(m_ReleaseRing)) {
                 break;
             }
-            WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_NOTIFY_OOM), 0);
+            SyncIo(QXL_IO_NOTIFY_OOM, 0);
         }
         SPICE_RING_CONS_WAIT(m_ReleaseRing, wait);
 
@@ -3567,7 +3601,7 @@ void QxlDevice::WaitForReleaseRing(void)
         WAIT_FOR_EVENT(m_DisplayEvent, &timeout);
 
         if (SPICE_RING_IS_EMPTY(m_ReleaseRing)) {
-            WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_NOTIFY_OOM), 0);
+            SyncIo(QXL_IO_NOTIFY_OOM, 0);
         }
     }
     DbgPrint(TRACE_LEVEL_VERBOSE, ("%s: <---\n", __FUNCTION__));
@@ -3898,7 +3932,7 @@ VOID QxlDevice::BltBits (
     }
 
     CONST RECT* pRect = &pRects[0];
-
+    UpdateArea(pRect, 0);
     drawable->u.copy.scale_mode = SPICE_IMAGE_SCALE_MODE_NEAREST;
     drawable->u.copy.mask.bitmap = 0;
     drawable->u.copy.rop_descriptor = SPICE_ROPD_OP_PUT;
@@ -4057,7 +4091,7 @@ VOID QxlDevice::PushCmd()
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     SPICE_RING_PUSH(m_CommandRing, notify);
     if (notify) {
-        WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_NOTIFY_CMD), 0);
+        SyncIo(QXL_IO_NOTIFY_CMD, 0);
     }
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s notify = %d\n", __FUNCTION__, notify));
 }
@@ -4121,12 +4155,13 @@ VOID QxlDevice::DpcRoutine(PVOID ptr)
     DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
 }
 
-VOID QxlDevice::UpdateArea(RECTL *area, UINT32 surface_id)
+VOID QxlDevice::UpdateArea(CONST RECT* area, UINT32 surface_id)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     CopyRect(&m_RamHdr->update_area, area);
     m_RamHdr->update_surface = surface_id;
-    WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_UPDATE_AREA), 0);
+//    AsyncIo(QXL_IO_UPDATE_AREA_ASYNC, 0);
+    SyncIo(QXL_IO_UPDATE_AREA, 0);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
