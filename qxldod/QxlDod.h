@@ -239,6 +239,8 @@ public:
                                  _In_ const CURRENT_BDD_MODE* pModeCur) = 0;
 
     virtual VOID BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod) = 0;
+    virtual NTSTATUS SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape) = 0;
+    virtual NTSTATUS SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition) = 0;
 protected:
     virtual NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
 protected:
@@ -276,6 +278,8 @@ public:
     BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
     VOID DpcRoutine(PVOID);
     VOID ResetDevice(VOID);
+    NTSTATUS SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape);
+    NTSTATUS SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition);
 protected:
     NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
 private:
@@ -379,23 +383,15 @@ typedef struct Ring {
     RingItem *next;
 } Ring;
 
-typedef struct CacheImage {
-    struct CacheImage *next;
-    RingItem lru_link;
-    UINT32 key;
-    UINT32 hits;
-    UINT8 format;
-    UINT32 width;
-    UINT32 height;
-    struct InternalImage *image;
-} CacheImage;
-
 typedef struct InternalImage {
-    CacheImage *cache;
     QXLImage image;
 } InternalImage;
 
+typedef struct InternalCursor {
+    QXLCursor cursor;
+} InternalCursor;
 
+#define CURSOR_ALLOC_SIZE (PAGE_SIZE << 1)
 
 typedef struct DpcCbContext {
     void* ptr;
@@ -433,6 +429,8 @@ public:
     BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
     VOID DpcRoutine(PVOID);
     VOID ResetDevice(VOID);
+    NTSTATUS SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape);
+    NTSTATUS SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition);
 protected:
     NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
     VOID BltBits (BLT_INFO* pDst,
@@ -444,7 +442,9 @@ protected:
                     CONST RECT *clip,
                     UINT32 surface_id);
     void PushDrawable(QXLDrawable *drawable);
+    void PushCursorCmd(QXLCursorCmd *cursor_cmd);
     QXLDrawable *GetDrawable();
+    QXLCursorCmd *CursorCmd();
     void *AllocMem(UINT32 mspace_type, size_t size, BOOL force);
     VOID UpdateArea(CONST RECT* area, UINT32 surface_id);
     VOID SetImageId(InternalImage *internal,
@@ -475,12 +475,17 @@ private:
     BOOL SetClip(const RECT *clip, QXLDrawable *drawable);
     void AddRes(QXLOutput *output, Resource *res);
     void DrawableAddRes(QXLDrawable *drawable, Resource *res);
+    void CursorCmdAddRes(QXLCursorCmd *cmd, Resource *res);
     void FreeClipRects(Resource *res);
     void static FreeClipRectsEx(Resource *res);
     void FreeBitmapImage(Resource *res);
     void static FreeBitmapImageEx(Resource *res);
+    void static FreeCursorEx(Resource *res);
+    void FreeCursor(Resource *res);
     void WaitForCmdRing(void);
     void PushCmd(void);
+    void WaitForCursorRing(void);
+    void PushCursor(void);
     void PutBytesAlign(QXLDataChunk **chunk_ptr, UINT8 **now_ptr,
                             UINT8 **end_ptr, UINT8 *src, int size,
                             size_t alloc_size, uint32_t alignment);
@@ -527,7 +532,7 @@ private:
     KMUTEX m_MemLock;
     KMUTEX m_CmdLock;
     KMUTEX m_IoLock;
-
+    KMUTEX m_CrsLock;
     MspaceInfo m_MSInfo[NUM_MSPACES];
 
     UINT64 m_FreeOutputs;

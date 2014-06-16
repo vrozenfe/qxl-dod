@@ -395,12 +395,12 @@ NTSTATUS QxlDod::QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO* pQueryAda
 
             pDriverCaps->WDDMVersion = DXGKDDI_WDDMv1_2;
             pDriverCaps->HighestAcceptableAddress.QuadPart = -1;
-/*
+
             pDriverCaps->MaxPointerWidth  = 64;
             pDriverCaps->MaxPointerHeight = 64;
             pDriverCaps->PointerCaps.Monochrome = 1;
-            pDriverCaps->PointerCaps.Color = 1;
-*/
+//            pDriverCaps->PointerCaps.Color = 1;
+
             DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s 1\n", __FUNCTION__));
             return STATUS_SUCCESS;
         }
@@ -427,7 +427,7 @@ NTSTATUS QxlDod::SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetP
         DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s Cursor is not visible\n", __FUNCTION__));
         return STATUS_SUCCESS;
     }
-    return STATUS_UNSUCCESSFUL;
+    return m_pHWDevice->SetPointerPosition(pSetPointerPosition);
 }
 
 // Basic Sample Display Driver does not support hardware cursors, and reports such
@@ -439,7 +439,7 @@ NTSTATUS QxlDod::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointer
 
     DbgPrint(TRACE_LEVEL_INFORMATION, ("<---> %s Height = %d, Width = %d, XHot= %d, YHot = %d SourceId = %d\n", 
         __FUNCTION__, pSetPointerShape->Height, pSetPointerShape->Width, pSetPointerShape->XHot, pSetPointerShape->YHot, pSetPointerShape->VidPnSourceId));
-    return STATUS_NOT_SUPPORTED;
+    return m_pHWDevice->SetPointerShape(pSetPointerShape);
 }
 
 NTSTATUS QxlDod::Escape(_In_ CONST DXGKARG_ESCAPE* pEscape)
@@ -1576,7 +1576,6 @@ NTSTATUS QxlDod::IsVidPnPathFieldsValid(CONST D3DKMDT_VIDPN_PRESENT_PATH* pPath)
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
 }
-
 
 NTSTATUS QxlDod::IsVidPnSourceModeFieldsValid(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMode) const
 {
@@ -2824,6 +2823,16 @@ VOID VgaDevice::ResetDevice(VOID)
 {
 }
 
+NTSTATUS  VgaDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape)
+{
+    return STATUS_NOT_SUPPORTED;
+}
+
+NTSTATUS VgaDevice::SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition)
+{
+    return STATUS_SUCCESS;
+}
+
 QxlDevice::QxlDevice(_In_ QxlDod* pQxlDod)
 {
     m_pQxlDod = pQxlDod;
@@ -2963,7 +2972,6 @@ NTSTATUS QxlDevice::QueryCurrentMode(PVIDEO_MODE RequestedMode)
 NTSTATUS QxlDevice::SetCurrentMode(ULONG Mode)
 {
     DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s Mode = %x\n", __FUNCTION__, Mode));
-//    UNREFERENCED_PARAMETER(Mode);
     for (ULONG idx = 0; idx < m_ModeCount; idx++)
     {
         if (Mode == m_ModeNumbers[idx])
@@ -3213,7 +3221,7 @@ void QxlDevice::CreatePrimarySurface(PVIDEO_MODE_INFORMATION pModeInfo)
 
     primary_surface_create->mem = PA( m_RamStart, m_MainMemSlot);
 
-    primary_surface_create->flags = QXL_SURF_FLAG_KEEP_DATA; //0;
+    primary_surface_create->flags = QXL_SURF_FLAG_KEEP_DATA;
     primary_surface_create->type = QXL_SURF_TYPE_PRIMARY;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s format = %d, width = %d, height = %d, stride = %d\n", __FUNCTION__, pModeInfo->BitsPerPlane, pModeInfo->VisScreenWidth, pModeInfo->VisScreenHeight,
                                      pModeInfo->ScreenStride));
@@ -3273,6 +3281,7 @@ BOOL QxlDevice::CreateEvents()
     KeInitializeMutex(&m_MemLock,1);
     KeInitializeMutex(&m_CmdLock,1);
     KeInitializeMutex(&m_IoLock,1);
+    KeInitializeMutex(&m_CrsLock,1);
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return TRUE;
@@ -3371,7 +3380,6 @@ void QxlDevice::InitDeviceMemoryResources(void)
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
-
 void QxlDevice::InitMspace(UINT32 mspace_type, UINT8 *start, size_t capacity)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s type = %d, start = %p, capacity = %d\n", __FUNCTION__, mspace_type, start, capacity));
@@ -3388,7 +3396,6 @@ void QxlDevice::ResetDevice(void)
     WRITE_PORT_UCHAR(m_IoBase + QXL_IO_MEMSLOT_ADD, 0);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
-
 
 NTSTATUS
 QxlDevice::ExecutePresentDisplayOnly(
@@ -3607,7 +3614,6 @@ void QxlDevice::WaitForReleaseRing(void)
     DbgPrint(TRACE_LEVEL_VERBOSE, ("%s: <---\n", __FUNCTION__));
 }
 
-
 void QxlDevice::FlushReleaseRing()
 {
     UINT64 output;
@@ -3738,7 +3744,6 @@ void QxlDevice::FreeMem(UINT32 mspace_type, void *ptr)
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
-
 QXLDrawable *QxlDevice::GetDrawable()
 {
     QXLOutput *output;
@@ -3749,6 +3754,21 @@ QXLDrawable *QxlDevice::GetDrawable()
     ((QXLDrawable *)output->data)->release_info.id = (UINT64)output;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s 0x%x\n", __FUNCTION__, output));
     return(QXLDrawable *)output->data;
+}
+
+QXLCursorCmd *QxlDevice::CursorCmd()
+{
+    QXLCursorCmd *cursor_cmd;
+    QXLOutput *output;
+
+    DbgPrint(TRACE_LEVEL_FATAL, ("---> %s\n", __FUNCTION__));
+    output = (QXLOutput *)AllocMem(MSPACE_TYPE_DEVRAM, sizeof(QXLOutput) + sizeof(QXLCursorCmd), TRUE);
+    output->num_res = 0;
+    RESOURCE_TYPE(output, RESOURCE_TYPE_CURSOR);
+    cursor_cmd = (QXLCursorCmd *)output->data;
+    cursor_cmd->release_info.id = (UINT64)output;
+    DbgPrint(TRACE_LEVEL_FATAL, ("<--- %s\n", __FUNCTION__));
+    return cursor_cmd;
 }
 
 BOOL QxlDevice::SetClip(const RECT *clip, QXLDrawable *drawable)
@@ -3791,6 +3811,14 @@ void QxlDevice::DrawableAddRes(QXLDrawable *drawable, Resource *res)
     QXLOutput *output;
 
     output = (QXLOutput *)((UINT8 *)drawable - sizeof(QXLOutput));
+    AddRes(output, res);
+}
+
+void QxlDevice::CursorCmdAddRes(QXLCursorCmd *cmd, Resource *res)
+{
+    QXLOutput *output;
+
+    output = (QXLOutput *)((UINT8 *)cmd - sizeof(QXLOutput));
     AddRes(output, res);
 }
 
@@ -3842,6 +3870,29 @@ void QxlDevice::FreeBitmapImage(Resource *res)
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
+void QxlDevice::FreeCursorEx(Resource *res)
+{
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s\n", __FUNCTION__));
+    QxlDevice* pqxl = (QxlDevice*)res->ptr;
+    pqxl->FreeCursor(res);
+}
+
+void QxlDevice::FreeCursor(Resource *res)
+{
+    QXLPHYSICAL chunk_phys;
+
+    DbgPrint(TRACE_LEVEL_FATAL, ("---> %s\n", __FUNCTION__));
+    chunk_phys = ((InternalCursor *)res->res)->cursor.chunk.next_chunk;
+    while (chunk_phys) {
+        QXLDataChunk *chunk = (QXLDataChunk *)VA(chunk_phys, m_MainMemSlot);
+        chunk_phys = chunk->next_chunk;
+        FreeMem(MSPACE_TYPE_DEVRAM, chunk);
+    }
+
+    FreeMem(MSPACE_TYPE_DEVRAM, res);
+    DbgPrint(TRACE_LEVEL_FATAL, ("<--- %s\n", __FUNCTION__));
+}
+
 QXLDrawable *QxlDevice::Drawable(UINT8 type, CONST RECT *area, CONST RECT *clip, UINT32 surface_id)
 {
     QXLDrawable *drawable;
@@ -3890,6 +3941,29 @@ void QxlDevice::PushDrawable(QXLDrawable *drawable) {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
+void QxlDevice::PushCursorCmd(QXLCursorCmd *cursor_cmd)
+{
+    QXLCommand *cmd;
+
+    DbgPrint(TRACE_LEVEL_FATAL, ("---> %s\n", __FUNCTION__));
+
+    KeWaitForSingleObject
+    (
+        &m_CrsLock,
+        Executive,
+        KernelMode,
+        FALSE,
+        NULL
+    );
+    WaitForCursorRing();
+    cmd = SPICE_RING_PROD_ITEM(m_CursorRing);
+    cmd->type = QXL_CMD_CURSOR;
+    cmd->data = PA(cursor_cmd, m_MainMemSlot);
+    PushCursor();
+    KeReleaseMutex(&m_CrsLock,FALSE);
+    DbgPrint(TRACE_LEVEL_FATAL, ("<--- %s\n", __FUNCTION__));
+}
+
 VOID QxlDevice::SetImageId(InternalImage *internal,
     BOOL cache_me,
     LONG width,
@@ -3908,7 +3982,6 @@ VOID QxlDevice::SetImageId(InternalImage *internal,
         internal->image.descriptor.flags = 0;
     }
 }
-
 
 VOID QxlDevice::BltBits (
     BLT_INFO* pDst,
@@ -3951,7 +4024,6 @@ VOID QxlDevice::BltBits (
     drawable->u.copy.src_area.left = 0;
     drawable->u.copy.src_area.top = 0;
     drawable->u.copy.src_area.right = width;
-
 
     alloc_size = BITMAP_ALLOC_BASE + BITS_BUF_MAX - BITS_BUF_MAX % line_size;
     alloc_size = MIN(BITMAP_ALLOC_BASE + height * line_size, alloc_size);
@@ -4048,7 +4120,6 @@ VOID QxlDevice::PutBytesAlign(QXLDataChunk **chunk_ptr, UINT8 **now_ptr,
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
-
 VOID QxlDevice::BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod)
 {
     QXLDrawable *drawable;
@@ -4085,6 +4156,103 @@ NTSTATUS QxlDevice::HWClose(void)
     return STATUS_SUCCESS;
 }
 
+NTSTATUS  QxlDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape)
+{
+    QXLCursorCmd *cursor_cmd;
+    InternalCursor *internal;
+    QXLCursor *cursor;
+    Resource *res;
+    QXLDataChunk *chunk;
+    ULONG unique;
+    UINT8 *src;
+    UINT8 *src_end;
+    UINT8 *now;
+    UINT8 *end;
+    int line_size;
+
+    DbgPrint(TRACE_LEVEL_FATAL, ("<--> %s flag = %d pitch = %d, pixels = %p, id = %d, w = %d, h = %d, x = %d, y = %d\n", __FUNCTION__,
+                                 pSetPointerShape->Flags.Value,
+                                 pSetPointerShape->Pitch,
+                                 pSetPointerShape->pPixels,
+                                 pSetPointerShape->VidPnSourceId,
+                                 pSetPointerShape->Width,
+                                 pSetPointerShape->Height,
+                                 pSetPointerShape->XHot,
+                                 pSetPointerShape->YHot));
+    if (!pSetPointerShape->Flags.Monochrome)
+       return STATUS_UNSUCCESSFUL;
+    cursor_cmd = CursorCmd();
+    cursor_cmd->type = QXL_CURSOR_SET;
+
+    cursor_cmd->u.set.visible = TRUE;
+    cursor_cmd->u.set.position.x = (INT16)pSetPointerShape->XHot;
+    cursor_cmd->u.set.position.y = (INT16)pSetPointerShape->YHot;
+
+    res = (Resource *)AllocMem(MSPACE_TYPE_DEVRAM, CURSOR_ALLOC_SIZE, TRUE);
+    res->refs = 1;
+    res->free = FreeCursorEx;
+    res->ptr = this;
+    RESOURCE_TYPE(res, RESOURCE_TYPE_CURSOR);
+
+    internal = (InternalCursor *)res->res;
+
+    cursor = &internal->cursor;
+    cursor->header.type = SPICE_CURSOR_TYPE_MONO;
+    cursor->header.unique = 0;
+    cursor->header.width = (UINT16)pSetPointerShape->Width;
+    cursor->header.height = (UINT16)pSetPointerShape->Height;
+    cursor->header.hot_spot_x = (UINT16)pSetPointerShape->XHot;
+    cursor->header.hot_spot_y = (UINT16)pSetPointerShape->YHot;
+
+    line_size = pSetPointerShape->Pitch;
+    cursor->data_size = line_size * pSetPointerShape->Width;
+
+    chunk = &cursor->chunk;
+    chunk->data_size = cursor->data_size;
+    chunk->prev_chunk = 0;
+    chunk->next_chunk = 0;
+
+    src = (UINT8*)pSetPointerShape->pPixels;
+    now = chunk->data;
+    end = (UINT8 *)res + CURSOR_ALLOC_SIZE;
+
+
+//    src_end = src + (local_surf->lDelta * local_surf->sizlBitmap.cy);
+//    for (; src != src_end; src += local_surf->lDelta) {
+//        PutBytesAlign(&chunk, &now, &end, src, line_size,
+//                 PAGE_SIZE, 1);
+//    }
+    memcpy(chunk->data, src, chunk->data_size);
+    CursorCmdAddRes(cursor_cmd, res);
+    RELEASE_RES(res);
+    cursor_cmd->u.set.shape = PA(&internal->cursor, m_MainMemSlot);
+    PushCursorCmd(cursor_cmd);
+    DbgPrint(TRACE_LEVEL_FATAL, ("<--- %s\n", __FUNCTION__));
+
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS QxlDevice::SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition)
+{
+    QXLCursorCmd *cursor_cmd;
+    DbgPrint(TRACE_LEVEL_FATAL, ("<--> %s flag = %d id = %d, x = %d, y = %d\n", __FUNCTION__,
+                                 pSetPointerPosition->Flags.Value,
+                                 pSetPointerPosition->VidPnSourceId,
+                                 pSetPointerPosition->X,
+                                 pSetPointerPosition->Y));
+    cursor_cmd = CursorCmd();
+    if (pSetPointerPosition->X < 0) {
+        cursor_cmd->type = QXL_CURSOR_HIDE;
+    } else {
+        cursor_cmd->type = QXL_CURSOR_MOVE;
+        cursor_cmd->u.position.x = (INT16)pSetPointerPosition->X;
+        cursor_cmd->u.position.y = (INT16)pSetPointerPosition->Y;
+    }
+    PushCursorCmd(cursor_cmd);
+    DbgPrint(TRACE_LEVEL_FATAL, ("<--- %s\n", __FUNCTION__));
+    return STATUS_SUCCESS;
+}
+
 VOID QxlDevice::WaitForCmdRing()
 {
     int wait;
@@ -4108,6 +4276,39 @@ VOID QxlDevice::PushCmd()
     SPICE_RING_PUSH(m_CommandRing, notify);
     if (notify) {
         SyncIo(QXL_IO_NOTIFY_CMD, 0);
+    }
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s notify = %d\n", __FUNCTION__, notify));
+}
+
+VOID QxlDevice::WaitForCursorRing(VOID)
+{
+    int wait;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+
+    for (;;) {
+        SPICE_RING_PROD_WAIT(m_CursorRing, wait);
+
+        if (!wait) {
+            break;
+        }
+
+        LARGE_INTEGER timeout; // 1 => 100 nanoseconds
+        timeout.QuadPart = -1 * (1000 * 1000 * 10); //negative  => relative // 1s
+        WAIT_FOR_EVENT(m_CursorEvent, &timeout);
+
+        if (SPICE_RING_IS_FULL(m_CursorRing)) {
+            DbgPrint(TRACE_LEVEL_ERROR, ("%s: timeout\n", __FUNCTION__));
+        }
+    }
+}
+
+VOID QxlDevice::PushCursor(VOID)
+{
+    int notify;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    SPICE_RING_PUSH(m_CursorRing, notify);
+    if (notify) {
+        SyncIo(QXL_IO_NOTIFY_CURSOR, 0);
     }
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s notify = %d\n", __FUNCTION__, notify));
 }
