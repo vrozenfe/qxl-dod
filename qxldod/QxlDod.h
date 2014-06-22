@@ -401,6 +401,8 @@ typedef struct DpcCbContext {
 #define BITMAP_ALLOC_BASE (sizeof(Resource) + sizeof(InternalImage) + sizeof(QXLDataChunk))
 #define BITS_BUF_MAX (64 * 1024)
 #define MIN(x, y) (((x) <= (y)) ? (x) : (y))
+#define MAX(x, y) (((x) >= (y)) ? (x) : (y))
+#define ALIGN(a, b) (((a) + ((b) - 1)) & ~((b) - 1))
 
 class QxlDevice  :
     public HwDeviceIntrface
