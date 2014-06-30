@@ -220,7 +220,7 @@ public:
     virtual NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode) = 0;
     virtual NTSTATUS SetCurrentMode(ULONG Mode) = 0;
     virtual NTSTATUS GetCurrentMode(ULONG* Mode) = 0;
-    virtual NTSTATUS SetPowerState(POWER_ACTION ActionType) = 0;
+    virtual NTSTATUS SetPowerState(DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
     virtual NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
     virtual NTSTATUS HWClose(void) = 0;
     virtual BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber) = 0;
@@ -267,7 +267,7 @@ public:
     NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode);
     NTSTATUS SetCurrentMode(ULONG Mode);
     NTSTATUS GetCurrentMode(ULONG* Mode);
-    NTSTATUS SetPowerState(POWER_ACTION ActionType);
+    NTSTATUS SetPowerState(DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWClose(void);
     DevType GetType(void) { return DEVICE_VGA;}
@@ -420,7 +420,7 @@ public:
     NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode);
     NTSTATUS SetCurrentMode(ULONG Mode);
     NTSTATUS GetCurrentMode(ULONG* Mode);
-    NTSTATUS SetPowerState(POWER_ACTION ActionType);
+    NTSTATUS SetPowerState(DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWClose(void);
     DevType GetType(void) { return DEVICE_QXL;}
@@ -463,6 +463,8 @@ protected:
                     LONG height,
                     UINT8 format, UINT32 key);
 private:
+    NTSTATUS QxlInit(DXGK_DISPLAY_INFORMATION* pDispInfo);
+    void QxlClose(void);
     void UnmapMemory(void);
     BOOL SetVideoModeInfo(UINT Idx, QXLMode* pModeInfo);
     BOOL InitMemSlots(void);

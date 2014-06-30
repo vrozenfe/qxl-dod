@@ -293,7 +293,7 @@ NTSTATUS QxlDod::SetPowerState(_In_  ULONG HardwareUid,
         return m_pHWDevice->SetPowerState(DevicePowerState, &(m_CurrentModes[0].DispInfo));
     }
     // TODO: This is where the specified monitor should be powered up/down
-    m_pHWDevice->SetPowerState(ActionType);
+    
     return STATUS_SUCCESS;
 }
 
@@ -2517,21 +2517,20 @@ NTSTATUS VgaDevice::HWClose(void)
     return STATUS_SUCCESS;
 }
 
-NTSTATUS VgaDevice::SetPowerState(POWER_ACTION ActionType)
+NTSTATUS VgaDevice::SetPowerState(_In_  DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
     DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
 
     X86BIOS_REGISTERS regs = {0};
     regs.Eax = 0x4F10;
-    regs.Ebx = 1;
-    switch (ActionType)
+    regs.Ebx = 0;
+    switch (DevicePowerState)
     {
-        case PowerActionNone: break;
-        case PowerActionSleep: regs.Ebx |= 0x100; break;
-        case PowerActionHibernate: regs.Ebx |= 0x200; break;
-        case PowerActionShutdown:
-        case PowerActionShutdownReset:
-        case PowerActionShutdownOff: regs.Ebx |= 0x400; break;
+        case PowerDeviceUnspecified: 
+		case PowerDeviceD0: regs.Ebx |= 0x1; break;
+        case PowerDeviceD1:
+        case PowerDeviceD2: 
+        case PowerDeviceD3: regs.Ebx |= 0x400; break;
     }
     if (!x86BiosCall (0x10, &regs))
     {
@@ -2995,10 +2994,17 @@ NTSTATUS QxlDevice::GetCurrentMode(ULONG* pMode)
     return Status;
 }
 
-NTSTATUS QxlDevice::SetPowerState(POWER_ACTION ActionType)
+NTSTATUS QxlDevice::SetPowerState(_In_ DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
-    UNREFERENCED_PARAMETER(ActionType);
+    switch (DevicePowerState)
+    {
+        case PowerDeviceUnspecified: 
+		case PowerDeviceD0: QxlInit(pDispInfo); break;
+        case PowerDeviceD1:
+        case PowerDeviceD2: 
+        case PowerDeviceD3: QxlClose(); break;
+    }
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
 }
@@ -3127,17 +3133,30 @@ NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
         m_RamStart == NULL || m_RamSize == 0 ||
         m_VRamStart == NULL || m_VRamSize == 0 ||
         (m_RamHdr = (QXLRam *)(m_RamStart + m_RomHdr->ram_header_offset)) == NULL ||
-        m_RamHdr->magic != QXL_RAM_MAGIC || !InitMemSlots()) 
+        m_RamHdr->magic != QXL_RAM_MAGIC) 
     {
         UnmapMemory();
-        DestroyMemSlots();
         return STATUS_UNSUCCESSFUL;
     }
 
     m_LogBuf = m_RamHdr->log_buf;
     m_LogPort = m_IoBase + QXL_IO_LOG;
 
-    Status = GetModeList(pDispInfo);
+    CreateEvents();
+
+    return QxlInit(pDispInfo);
+}
+
+NTSTATUS QxlDevice::QxlInit(DXGK_DISPLAY_INFORMATION* pDispInfo)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (!InitMemSlots()) {
+		DestroyMemSlots();
+		return STATUS_UNSUCCESSFUL;
+	}
+
+	Status = GetModeList(pDispInfo);
     if (!NT_SUCCESS(Status))
     {
         DbgPrint(TRACE_LEVEL_ERROR, ("GetModeList failed with status 0x%X\n",
@@ -3146,14 +3165,16 @@ NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
     }
 
     WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_RESET), 0);
-    CreateEvents();
     CreateRings();
     m_RamHdr->int_mask = QXL_INTERRUPT_MASK;
     CreateMemSlots();
     InitDeviceMemoryResources();
+    return Status;
+}
 
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
-    return STATUS_SUCCESS;
+void QxlDevice::QxlClose()
+{
+    DestroyMemSlots();
 }
 
 void QxlDevice::UnmapMemory(void)
@@ -4142,7 +4163,7 @@ VOID QxlDevice::BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod)
     QXLDrawable *drawable;
     RECT Rect;
     PAGED_CODE();
-
+return;
     DbgPrint(TRACE_LEVEL_FATAL, ("---> %s\n", __FUNCTION__));
     Rect.bottom = pCurrentBddMod->SrcModeHeight;
     Rect.top = 0;
@@ -4167,8 +4188,8 @@ VOID QxlDevice::BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod)
 NTSTATUS QxlDevice::HWClose(void)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    QxlClose();
     UnmapMemory();
-    DestroyMemSlots();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
 }
