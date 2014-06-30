@@ -57,14 +57,3 @@ _When_((PoolType & NonPagedPoolMustSucceed) != 0,
 void* __cdecl operator new[](size_t Size, POOL_TYPE PoolType = PagedPool);
 void  __cdecl operator delete(void* pObject);
 void  __cdecl operator delete[](void* pObject);
-
-// Pool allocation tag for the Sample Display Driver. All allocations use this tag.
-
-
-class BaseObject
-{
-public:
-	BaseObject(void);
-	~BaseObject(void);
-};
-

@@ -68,13 +68,3 @@ void __cdecl operator delete[](void* pObject)
         ExFreePool(pObject);
     }
 }
-
-
-BaseObject::BaseObject(void)
-{
-}
-
-
-BaseObject::~BaseObject(void)
-{
-}

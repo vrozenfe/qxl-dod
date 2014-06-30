@@ -207,8 +207,7 @@ typedef struct _CURRENT_BDD_MODE
 
 class QxlDod;
  
-class HwDeviceIntrface :
-    public BaseObject
+class HwDeviceIntrface
 {
 public:
     virtual NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode) = 0;
@@ -304,7 +303,6 @@ typedef struct MspaceInfo {
 enum {
     MSPACE_TYPE_DEVRAM,
     MSPACE_TYPE_VRAM,
-
     NUM_MSPACES,
 };
 
@@ -541,9 +539,7 @@ private:
     UINT32 m_Pending;
 };
 
-class QxlDod :
-    public BaseObject
-{
+class QxlDod {
 private:
     DEVICE_OBJECT* m_pPhysicalDevice;
     DXGKRNL_INTERFACE m_DxgkInterface;
@@ -675,40 +671,7 @@ private:
     D3DDDI_VIDEO_PRESENT_SOURCE_ID FindSourceForTarget(D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId, BOOLEAN DefaultToZero);
     NTSTATUS IsVidPnSourceModeFieldsValid(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMode) const;
     NTSTATUS IsVidPnPathFieldsValid(CONST D3DKMDT_VIDPN_PRESENT_PATH* pPath) const;
-
-
     NTSTATUS RegisterHWInfo();
-/*
-    NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
-                                 _In_ UINT              DstBitPerPixel,
-                                 _In_ BYTE*             SrcAddr,
-                                 _In_ UINT              SrcBytesPerPixel,
-                                 _In_ LONG              SrcPitch,
-                                 _In_ ULONG             NumMoves,
-                                 _In_ D3DKMT_MOVE_RECT* pMoves,
-                                 _In_ ULONG             NumDirtyRects,
-                                 _In_ RECT*             pDirtyRect,
-                                 _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation);
-    BYTE* GetRowStart(_In_ CONST BLT_INFO* pBltInfo, CONST RECT* pRect);
-    VOID GetPitches(_In_ CONST BLT_INFO* pBltInfo, _Out_ LONG* pPixelPitch, _Out_ LONG* pRowPitch);
-    VOID CopyBitsGeneric(
-                                  BLT_INFO* pDst,
-                                  CONST BLT_INFO* pSrc,
-                                  UINT  NumRects,
-                                 _In_reads_(NumRects) CONST RECT *pRects);
-
-    VOID CopyBits32_32(
-                                 BLT_INFO* pDst,
-                                 CONST BLT_INFO* pSrc,
-                                 UINT  NumRects,
-                                 _In_reads_(NumRects) CONST RECT *pRects);
-    VOID BltBits (
-                                 BLT_INFO* pDst,
-                                 CONST BLT_INFO* pSrc,
-                                 UINT  NumRects,
-                                 _In_reads_(NumRects) CONST RECT *pRects);
-    VOID BlackOutScreen(D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId);
-*/
 };
 
 NTSTATUS
