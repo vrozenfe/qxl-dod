@@ -7,6 +7,8 @@
 #define MAX_VIEWS                  1
 #define BITS_PER_BYTE              8
 
+#define POINTER_SIZE               64
+
 typedef struct _QXL_FLAGS
 {
     UINT DriverStarted           : 1; // ( 1) 1 after StartDevice and 0 after StopDevice
@@ -206,9 +208,14 @@ typedef struct _CURRENT_BDD_MODE
 } CURRENT_BDD_MODE;
 
 class QxlDod;
- 
-class HwDeviceIntrface
-{
+
+enum DevType {
+    DEVICE_INTERFACE,
+    DEVICE_VGA,
+    DEVICE_QXL
+};
+
+class HwDeviceIntrface {
 public:
     virtual NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode) = 0;
     virtual NTSTATUS SetCurrentMode(ULONG Mode) = 0;
@@ -225,6 +232,7 @@ public:
     USHORT GetModeNumber(USHORT idx) {return m_ModeNumbers[idx];}
     USHORT GetCurrentModeIndex(void) {return m_CurrentMode;}
     VOID SetCurrentModeIndex(USHORT idx) {m_CurrentMode = idx;}
+    DevType GetType(void) { return DEVICE_INTERFACE;}
     virtual NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
                                  _In_ UINT              DstBitPerPixel,
                                  _In_ BYTE*             SrcAddr,
@@ -262,6 +270,7 @@ public:
     NTSTATUS SetPowerState(POWER_ACTION ActionType);
     NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWClose(void);
+    DevType GetType(void) { return DEVICE_VGA;}
     NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
                                  _In_ UINT              DstBitPerPixel,
                                  _In_ BYTE*             SrcAddr,
@@ -414,6 +423,7 @@ public:
     NTSTATUS SetPowerState(POWER_ACTION ActionType);
     NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWClose(void);
+    DevType GetType(void) { return DEVICE_QXL;}
     NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
                     _In_ UINT              DstBitPerPixel,
                     _In_ BYTE*             SrcAddr,
@@ -472,6 +482,7 @@ private:
     void FreeMem(UINT32 mspace_type, void *ptr);
     UINT64 ReleaseOutput(UINT64 output_id);
     void WaitForReleaseRing(void);
+    void EmptyReleaseRing(void);
     BOOL SetClip(const RECT *clip, QXLDrawable *drawable);
     void AddRes(QXLOutput *output, Resource *res);
     void DrawableAddRes(QXLDrawable *drawable, Resource *res);

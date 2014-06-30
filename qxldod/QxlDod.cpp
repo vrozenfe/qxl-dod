@@ -290,7 +290,7 @@ NTSTATUS QxlDod::SetPowerState(_In_  ULONG HardwareUid,
         m_AdapterPowerState = DevicePowerState;
 
         // There is nothing to do to specifically power up/down the display adapter
-        return STATUS_SUCCESS;
+        return m_pHWDevice->SetPowerState(DevicePowerState, &(m_CurrentModes[0].DispInfo));
     }
     // TODO: This is where the specified monitor should be powered up/down
     m_pHWDevice->SetPowerState(ActionType);
@@ -396,11 +396,12 @@ NTSTATUS QxlDod::QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO* pQueryAda
             pDriverCaps->WDDMVersion = DXGKDDI_WDDMv1_2;
             pDriverCaps->HighestAcceptableAddress.QuadPart = -1;
 
-            pDriverCaps->MaxPointerWidth  = 64;
-            pDriverCaps->MaxPointerHeight = 64;
-            pDriverCaps->PointerCaps.Monochrome = 1;
-            pDriverCaps->PointerCaps.Color = 1;
-
+            if (m_pHWDevice->GetType() == DEVICE_QXL) {
+                pDriverCaps->MaxPointerWidth  = POINTER_SIZE;
+                pDriverCaps->MaxPointerHeight = POINTER_SIZE;
+                pDriverCaps->PointerCaps.Monochrome = 1;
+                pDriverCaps->PointerCaps.Color = 1;
+            }
             DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s 1\n", __FUNCTION__));
             return STATUS_SUCCESS;
         }
