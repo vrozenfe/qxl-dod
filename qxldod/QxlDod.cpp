@@ -4043,7 +4043,7 @@ VOID QxlDevice::BltBits (
     }
 
     CONST RECT* pRect = &pRects[0];
-    UpdateArea(pRect, 0);
+//    UpdateArea(pRect, 0);
     drawable->u.copy.scale_mode = SPICE_IMAGE_SCALE_MODE_NEAREST;
     drawable->u.copy.mask.bitmap = 0;
     drawable->u.copy.rop_descriptor = SPICE_ROPD_OP_PUT;
