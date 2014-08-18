@@ -209,12 +209,6 @@ typedef struct _CURRENT_BDD_MODE
 
 class QxlDod;
 
-enum DevType {
-    DEVICE_INTERFACE,
-    DEVICE_VGA,
-    DEVICE_QXL
-};
-
 class HwDeviceIntrface {
 public:
     virtual NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode) = 0;
@@ -232,7 +226,7 @@ public:
     USHORT GetModeNumber(USHORT idx) {return m_ModeNumbers[idx];}
     USHORT GetCurrentModeIndex(void) {return m_CurrentMode;}
     VOID SetCurrentModeIndex(USHORT idx) {m_CurrentMode = idx;}
-    DevType GetType(void) { return DEVICE_INTERFACE;}
+    virtual BOOLEAN EnablePointer(void) = 0;
     virtual NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
                                  _In_ UINT              DstBitPerPixel,
                                  _In_ BYTE*             SrcAddr,
@@ -270,7 +264,7 @@ public:
     NTSTATUS SetPowerState(DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWClose(void);
-    DevType GetType(void) { return DEVICE_VGA;}
+    BOOLEAN EnablePointer(void) { return FALSE; }
     NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
                                  _In_ UINT              DstBitPerPixel,
                                  _In_ BYTE*             SrcAddr,
@@ -423,7 +417,7 @@ public:
     NTSTATUS SetPowerState(DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWClose(void);
-    DevType GetType(void) { return DEVICE_QXL;}
+    BOOLEAN EnablePointer(void) { return FALSE; }
     NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
                     _In_ UINT              DstBitPerPixel,
                     _In_ BYTE*             SrcAddr,

@@ -396,7 +396,7 @@ NTSTATUS QxlDod::QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO* pQueryAda
             pDriverCaps->WDDMVersion = DXGKDDI_WDDMv1_2;
             pDriverCaps->HighestAcceptableAddress.QuadPart = -1;
 
-            if (m_pHWDevice->GetType() == DEVICE_QXL) {
+            if (m_pHWDevice->EnablePointer()) {
                 pDriverCaps->MaxPointerWidth  = POINTER_SIZE;
                 pDriverCaps->MaxPointerHeight = POINTER_SIZE;
                 pDriverCaps->PointerCaps.Monochrome = 1;
@@ -4196,6 +4196,19 @@ NTSTATUS QxlDevice::HWClose(void)
 
 NTSTATUS  QxlDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape)
 {
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s flag = %x\n", __FUNCTION__, pSetPointerShape->Flags.Value));
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("<--> %s flag = %d pitch = %d, pixels = %p, id = %d, w = %d, h = %d, x = %d, y = %d\n", __FUNCTION__,
+                                 pSetPointerShape->Flags.Value,
+                                 pSetPointerShape->Pitch,
+                                 pSetPointerShape->pPixels,
+                                 pSetPointerShape->VidPnSourceId,
+                                 pSetPointerShape->Width,
+                                 pSetPointerShape->Height,
+                                 pSetPointerShape->XHot,
+                                 pSetPointerShape->YHot));
+    if (!EnablePointer() || (!pSetPointerShape->Flags.Monochrome && !pSetPointerShape->Flags.Color))
+        return STATUS_UNSUCCESSFUL;
+
     QXLCursorCmd *cursor_cmd;
     InternalCursor *internal;
     QXLCursor *cursor;
@@ -4208,18 +4221,6 @@ NTSTATUS  QxlDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPoi
     UINT8 *end;
     int line_size;
 
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s flag = %x\n", __FUNCTION__, pSetPointerShape->Flags.Value));
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<--> %s flag = %d pitch = %d, pixels = %p, id = %d, w = %d, h = %d, x = %d, y = %d\n", __FUNCTION__,
-                                 pSetPointerShape->Flags.Value,
-                                 pSetPointerShape->Pitch,
-                                 pSetPointerShape->pPixels,
-                                 pSetPointerShape->VidPnSourceId,
-                                 pSetPointerShape->Width,
-                                 pSetPointerShape->Height,
-                                 pSetPointerShape->XHot,
-                                 pSetPointerShape->YHot));
-    if (!pSetPointerShape->Flags.Monochrome && !pSetPointerShape->Flags.Color)
-       return STATUS_UNSUCCESSFUL;
     cursor_cmd = CursorCmd();
     cursor_cmd->type = QXL_CURSOR_SET;
 
@@ -4278,22 +4279,23 @@ NTSTATUS  QxlDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPoi
 
 NTSTATUS QxlDevice::SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition)
 {
-    QXLCursorCmd *cursor_cmd;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     DbgPrint(TRACE_LEVEL_INFORMATION, ("<--> %s flag = %d id = %d, x = %d, y = %d\n", __FUNCTION__,
                                  pSetPointerPosition->Flags.Value,
                                  pSetPointerPosition->VidPnSourceId,
                                  pSetPointerPosition->X,
                                  pSetPointerPosition->Y));
-    cursor_cmd = CursorCmd();
-    if (pSetPointerPosition->X < 0) {
-        cursor_cmd->type = QXL_CURSOR_HIDE;
-    } else {
-        cursor_cmd->type = QXL_CURSOR_MOVE;
-        cursor_cmd->u.position.x = (INT16)pSetPointerPosition->X;
-        cursor_cmd->u.position.y = (INT16)pSetPointerPosition->Y;
+    if (EnablePointer()) {
+        QXLCursorCmd *cursor_cmd = CursorCmd();
+        if (pSetPointerPosition->X < 0) {
+           cursor_cmd->type = QXL_CURSOR_HIDE;
+	} else {
+           cursor_cmd->type = QXL_CURSOR_MOVE;
+           cursor_cmd->u.position.x = (INT16)pSetPointerPosition->X;
+           cursor_cmd->u.position.y = (INT16)pSetPointerPosition->Y;
+        }
+        PushCursorCmd(cursor_cmd);
     }
-    PushCursorCmd(cursor_cmd);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
 }
