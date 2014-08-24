@@ -383,15 +383,15 @@ NTSTATUS QxlDod::QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO* pQueryAda
     {
         case DXGKQAITYPE_DRIVERCAPS:
         {
-            if (pQueryAdapterInfo->OutputDataSize < sizeof(DXGK_DRIVERCAPS))
+            if (!pQueryAdapterInfo->OutputDataSize/* < sizeof(DXGK_DRIVERCAPS)*/)
             {
-                DbgPrint(TRACE_LEVEL_ERROR, ("pQueryAdapterInfo->OutputDataSize (0x%I64x) is smaller than sizeof(DXGK_DRIVERCAPS) (0x%I64x)", pQueryAdapterInfo->OutputDataSize, sizeof(DXGK_DRIVERCAPS)));
+                DbgPrint(TRACE_LEVEL_ERROR, ("pQueryAdapterInfo->OutputDataSize (0x%u) is smaller than sizeof(DXGK_DRIVERCAPS) (0x%u)\n", pQueryAdapterInfo->OutputDataSize, sizeof(DXGK_DRIVERCAPS)));
                 return STATUS_BUFFER_TOO_SMALL;
             }
 
             DXGK_DRIVERCAPS* pDriverCaps = (DXGK_DRIVERCAPS*)pQueryAdapterInfo->pOutputData;
 
-            RtlZeroMemory(pDriverCaps, sizeof(DXGK_DRIVERCAPS));
+			RtlZeroMemory(pDriverCaps, pQueryAdapterInfo->OutputDataSize/*sizeof(DXGK_DRIVERCAPS)*/);
 
             pDriverCaps->WDDMVersion = DXGKDDI_WDDMv1_2;
             pDriverCaps->HighestAcceptableAddress.QuadPart = -1;
