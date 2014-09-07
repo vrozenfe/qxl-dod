@@ -417,7 +417,7 @@ public:
     NTSTATUS SetPowerState(DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWClose(void);
-    BOOLEAN EnablePointer(void) { return FALSE; }
+    BOOLEAN EnablePointer(void) { return TRUE; }
     NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
                     _In_ UINT              DstBitPerPixel,
                     _In_ BYTE*             SrcAddr,
@@ -561,6 +561,8 @@ private:
     D3DDDI_VIDEO_PRESENT_SOURCE_ID m_SystemDisplaySourceId;
     DXGKARG_SETPOINTERSHAPE m_PointerShape;
     HwDeviceIntrface* m_pHWDevice;
+    DWORD m_VgaCompatible;
+    DWORD m_PointerCaps;
 public:
     QxlDod(_In_ DEVICE_OBJECT* pPhysicalDeviceObject);
     ~QxlDod(void);
@@ -679,6 +681,7 @@ private:
     NTSTATUS IsVidPnSourceModeFieldsValid(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMode) const;
     NTSTATUS IsVidPnPathFieldsValid(CONST D3DKMDT_VIDPN_PRESENT_PATH* pPath) const;
     NTSTATUS RegisterHWInfo();
+	NTSTATUS ReadConfiguration();
 };
 
 NTSTATUS
