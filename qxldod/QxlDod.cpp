@@ -132,14 +132,6 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
         return Status;
     }
 
-    Status = RegisterHWInfo();
-    if (!NT_SUCCESS(Status))
-    {
-        QXL_LOG_ASSERTION1("RegisterHWInfo failed with status 0x%X\n",
-                           Status);
-        return Status;
-    }
-
     // This sample driver only uses the frame buffer of the POST device. DxgkCbAcquirePostDisplayOwnership 
     // gives you the frame buffer address and ensures that no one else is drawing to it. Be sure to give it back!
     Status = m_DxgkInterface.DxgkCbAcquirePostDisplayOwnership(m_DxgkInterface.DeviceHandle, &(m_CurrentModes[0].DispInfo));
@@ -166,6 +158,14 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
     if (!NT_SUCCESS(Status))
     {
         DbgPrint(TRACE_LEVEL_ERROR, ("HWInit failed with status 0x%X\n", Status));
+        return Status;
+    }
+
+    Status = RegisterHWInfo(m_pHWDevice->GetId());
+    if (!NT_SUCCESS(Status))
+    {
+        QXL_LOG_ASSERTION1("RegisterHWInfo failed with status 0x%X\n",
+                           Status);
         return Status;
     }
 
@@ -1805,7 +1805,7 @@ NTSTATUS QxlDod::WriteHWInfoStr(_In_ HANDLE DevInstRegKeyHandle, _In_ PCWSTR psz
     return Status;
 }
 
-NTSTATUS QxlDod::RegisterHWInfo()
+NTSTATUS QxlDod::RegisterHWInfo(ULONG Id)
 {
     PAGED_CODE();
 
@@ -1860,6 +1860,21 @@ NTSTATUS QxlDod::RegisterHWInfo()
                            REG_DWORD,
                            &MemorySize,
                            sizeof(MemorySize));
+    if (!NT_SUCCESS(Status))
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("ZwSetValueKey for MemorySize failed with Status: 0x%X\n", Status));
+        return Status;
+    }
+
+    UNICODE_STRING ValueQxlDeviceID;
+    RtlInitUnicodeString(&ValueQxlDeviceID, L"QxlDeviceID");
+    DWORD DeviceId = Id; // BDD has no access to video memory
+    Status = ZwSetValueKey(DevInstRegKeyHandle,
+                           &ValueQxlDeviceID,
+                           0,
+                           REG_BINARY,
+                           &DeviceId,
+                           sizeof(DeviceId));
     if (!NT_SUCCESS(Status))
     {
         DbgPrint(TRACE_LEVEL_ERROR, ("ZwSetValueKey for MemorySize failed with Status: 0x%X\n", Status));
@@ -2246,6 +2261,7 @@ VgaDevice::VgaDevice(_In_ QxlDod* pQxlDod)
     m_ModeCount = 0;
     m_ModeNumbers = NULL;
     m_CurrentMode = 0;
+    m_Id = 0;
 }
 
 VgaDevice::~VgaDevice(void)
@@ -2256,6 +2272,7 @@ VgaDevice::~VgaDevice(void)
     m_ModeNumbers = NULL;
     m_CurrentMode = 0;
     m_ModeCount = 0;
+    m_Id = 0;
 }
 
 BOOL VgaDevice::SetVideoModeInfo(UINT Idx, PVBE_MODEINFO pModeInfo)
@@ -3000,7 +3017,7 @@ NTSTATUS QxlDevice::SetPowerState(_In_ DEVICE_POWER_STATE DevicePowerState, DXGK
     switch (DevicePowerState)
     {
         case PowerDeviceUnspecified: 
-		case PowerDeviceD0: QxlInit(pDispInfo); break;
+        case PowerDeviceD0: QxlInit(pDispInfo); break;
         case PowerDeviceD1:
         case PowerDeviceD2: 
         case PowerDeviceD3: QxlClose(); break;
@@ -3141,6 +3158,7 @@ NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
 
     m_LogBuf = m_RamHdr->log_buf;
     m_LogPort = m_IoBase + QXL_IO_LOG;
+    m_Id = m_RomHdr->id;
 
     CreateEvents();
 
@@ -3152,11 +3170,11 @@ NTSTATUS QxlDevice::QxlInit(DXGK_DISPLAY_INFORMATION* pDispInfo)
     NTSTATUS Status = STATUS_SUCCESS;
 
     if (!InitMemSlots()) {
-		DestroyMemSlots();
-		return STATUS_UNSUCCESSFUL;
-	}
+        DestroyMemSlots();
+        return STATUS_UNSUCCESSFUL;
+    }
 
-	Status = GetModeList(pDispInfo);
+    Status = GetModeList(pDispInfo);
     if (!NT_SUCCESS(Status))
     {
         DbgPrint(TRACE_LEVEL_ERROR, ("GetModeList failed with status 0x%X\n",
