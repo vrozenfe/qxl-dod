@@ -242,6 +242,7 @@ public:
     virtual VOID BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod) = 0;
     virtual NTSTATUS SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape) = 0;
     virtual NTSTATUS SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition) = 0;
+    ULONG GetId(void) { return m_Id; }
 protected:
     virtual NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
 protected:
@@ -250,6 +251,7 @@ protected:
     ULONG m_ModeCount;
     PUSHORT m_ModeNumbers;
     USHORT m_CurrentMode;
+    ULONG  m_Id;
 };
 
 class VgaDevice  :
@@ -678,7 +680,7 @@ private:
     D3DDDI_VIDEO_PRESENT_SOURCE_ID FindSourceForTarget(D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId, BOOLEAN DefaultToZero);
     NTSTATUS IsVidPnSourceModeFieldsValid(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMode) const;
     NTSTATUS IsVidPnPathFieldsValid(CONST D3DKMDT_VIDPN_PRESENT_PATH* pPath) const;
-    NTSTATUS RegisterHWInfo();
+    NTSTATUS RegisterHWInfo(_In_ ULONG Id);
 };
 
 NTSTATUS
