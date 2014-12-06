@@ -132,18 +132,6 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
         return Status;
     }
 
-    // This sample driver only uses the frame buffer of the POST device. DxgkCbAcquirePostDisplayOwnership 
-    // gives you the frame buffer address and ensures that no one else is drawing to it. Be sure to give it back!
-    Status = m_DxgkInterface.DxgkCbAcquirePostDisplayOwnership(m_DxgkInterface.DeviceHandle, &(m_CurrentModes[0].DispInfo));
-    if (!NT_SUCCESS(Status) || m_CurrentModes[0].DispInfo.Width == 0)
-    {
-        // The most likely cause of failure is that the driver is simply not running on a POST device, or we are running
-        // after a pre-WDDM 1.2 driver. Since we can't draw anything, we should fail to start.
-        DbgPrint(TRACE_LEVEL_ERROR, ("DxgkCbAcquirePostDisplayOwnership failed with status 0x%X Width = %d\n",
-                           Status, m_CurrentModes[0].DispInfo.Width));
-        return STATUS_UNSUCCESSFUL;
-    }
-
     Status = CheckHardware();
     if (NT_SUCCESS(Status))
     {
@@ -167,6 +155,27 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
         QXL_LOG_ASSERTION1("RegisterHWInfo failed with status 0x%X\n",
                            Status);
         return Status;
+    }
+
+    if (m_pHWDevice->GetId() == 0)
+    {
+         Status = m_DxgkInterface.DxgkCbAcquirePostDisplayOwnership(m_DxgkInterface.DeviceHandle, &(m_CurrentModes[0].DispInfo));
+    }
+
+    if (!NT_SUCCESS(Status) )
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("DxgkCbAcquirePostDisplayOwnership failed with status 0x%X Width = %d\n",
+                           Status, m_CurrentModes[0].DispInfo.Width));
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    if (m_CurrentModes[0].DispInfo.Width == 0)
+    {
+        m_CurrentModes[0].DispInfo.Width = MIN_WIDTH_SIZE; 
+        m_CurrentModes[0].DispInfo.Height = MIN_HEIGHT_SIZE;
+        m_CurrentModes[0].DispInfo.Pitch = BPPFromPixelFormat(D3DDDIFMT_R8G8B8) / 8;
+        m_CurrentModes[0].DispInfo.ColorFormat = D3DDDIFMT_R8G8B8;
+        m_CurrentModes[0].DispInfo.TargetId = 0;
     }
 
    *pNumberOfViews = MAX_VIEWS;
@@ -307,13 +316,14 @@ NTSTATUS QxlDod::QueryChildRelations(_Out_writes_bytes_(ChildRelationsSize) DXGK
 
     // The last DXGK_CHILD_DESCRIPTOR in the array of pChildRelations must remain zeroed out, so we subtract this from the count
     ULONG ChildRelationsCount = (ChildRelationsSize / sizeof(DXGK_CHILD_DESCRIPTOR)) - 1;
+    ULONG DeviceId = m_pHWDevice->GetId();
     QXL_ASSERT(ChildRelationsCount <= MAX_CHILDREN);
 
     for (UINT ChildIndex = 0; ChildIndex < ChildRelationsCount; ++ChildIndex)
     {
         pChildRelations[ChildIndex].ChildDeviceType = TypeVideoOutput;
-        pChildRelations[ChildIndex].ChildCapabilities.HpdAwareness = HpdAwarenessAlwaysConnected;
-        pChildRelations[ChildIndex].ChildCapabilities.Type.VideoOutput.InterfaceTechnology = D3DKMDT_VOT_INTERNAL;
+        pChildRelations[ChildIndex].ChildCapabilities.HpdAwareness = (DeviceId == 0) ? HpdAwarenessAlwaysConnected : HpdAwarenessInterruptible;
+        pChildRelations[ChildIndex].ChildCapabilities.Type.VideoOutput.InterfaceTechnology = (DeviceId == 0) ? D3DKMDT_VOT_INTERNAL : D3DKMDT_VOT_HD15;
         pChildRelations[ChildIndex].ChildCapabilities.Type.VideoOutput.MonitorOrientationAwareness = D3DKMDT_MOA_NONE;
         pChildRelations[ChildIndex].ChildCapabilities.Type.VideoOutput.SupportsSdtvModes = FALSE;
         // TODO: Replace 0 with the actual ACPI ID of the child device, if available
@@ -2443,8 +2453,8 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
         {
             m_ModeNumbers[SuitableModeCount] = ModeTemp;
             SetVideoModeInfo(SuitableModeCount, &tmpModeInfo);
-            if (tmpModeInfo.XResolution == 1024 &&
-                tmpModeInfo.YResolution == 768)
+            if (tmpModeInfo.XResolution == MIN_WIDTH_SIZE &&
+                tmpModeInfo.YResolution == MIN_HEIGHT_SIZE)
             {
                 m_CurrentMode = (USHORT)SuitableModeCount;
             }
@@ -2947,8 +2957,8 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
         {
             m_ModeNumbers[SuitableModeCount] = CurrentMode;
             SetVideoModeInfo(SuitableModeCount, tmpModeInfo);
-            if (tmpModeInfo->x_res == 1024 &&
-                tmpModeInfo->y_res == 768)
+            if (tmpModeInfo->x_res == MIN_WIDTH_SIZE &&
+                tmpModeInfo->y_res == MIN_HEIGHT_SIZE)
             {
                 m_CurrentMode = (USHORT)SuitableModeCount;
             }
@@ -3111,6 +3121,9 @@ NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
                             m_RamPA = pResDescriptor->u.Memory.Start;
                             m_RamStart = (UINT8*)MemBase;
                             m_RamSize = MemLength;
+                            if (pDispInfo->PhysicAddress.QuadPart == 0L) {
+                                pDispInfo->PhysicAddress.QuadPart = m_RamPA.QuadPart;
+                            }
                             pci_range = QXL_VRAM_RANGE_INDEX;
                             break;
                         case QXL_VRAM_RANGE_INDEX:
