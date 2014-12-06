@@ -8,6 +8,8 @@
 #define BITS_PER_BYTE              8
 
 #define POINTER_SIZE               64
+#define MIN_WIDTH_SIZE             1024
+#define MIN_HEIGHT_SIZE            768
 
 typedef struct _QXL_FLAGS
 {
