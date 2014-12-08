@@ -98,7 +98,8 @@ NTSTATUS QxlDod::CheckHardware()
     Status = STATUS_GRAPHICS_DRIVER_MISMATCH;
     if (Header.VendorID == REDHAT_PCI_VENDOR_ID &&
         Header.DeviceID == 0x0100 &&
-        Header.RevisionID == 4)
+        Header.RevisionID == 4 &&
+        m_VgaCompatible == 0)
     {
         Status = STATUS_SUCCESS;
     }
@@ -401,16 +402,18 @@ NTSTATUS QxlDod::QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO* pQueryAda
 
             DXGK_DRIVERCAPS* pDriverCaps = (DXGK_DRIVERCAPS*)pQueryAdapterInfo->pOutputData;
 
-			RtlZeroMemory(pDriverCaps, pQueryAdapterInfo->OutputDataSize/*sizeof(DXGK_DRIVERCAPS)*/);
+            RtlZeroMemory(pDriverCaps, pQueryAdapterInfo->OutputDataSize/*sizeof(DXGK_DRIVERCAPS)*/);
 
             pDriverCaps->WDDMVersion = DXGKDDI_WDDMv1_2;
             pDriverCaps->HighestAcceptableAddress.QuadPart = -1;
+            pDriverCaps->SupportNonVGA = TRUE;
 
-            if (m_pHWDevice->EnablePointer()) {
+            if (m_pHWDevice->EnablePointer() && m_PointerCaps) {
                 pDriverCaps->MaxPointerWidth  = POINTER_SIZE;
                 pDriverCaps->MaxPointerHeight = POINTER_SIZE;
-                pDriverCaps->PointerCaps.Monochrome = 1;
-                pDriverCaps->PointerCaps.Color = 1;
+                pDriverCaps->PointerCaps.Monochrome = m_PointerCaps & 0x00000001;
+                pDriverCaps->PointerCaps.Color = m_PointerCaps & 0x00000002;
+                pDriverCaps->PointerCaps.MaskedColor = m_PointerCaps & 0x00000004;
             }
             DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s 1\n", __FUNCTION__));
             return STATUS_SUCCESS;
@@ -1895,6 +1898,56 @@ NTSTATUS QxlDod::RegisterHWInfo(ULONG Id)
     return Status;
 }
 
+NTSTATUS QxlDod::ReadConfiguration()
+{
+	PAGED_CODE();
+
+	NTSTATUS Status;
+	DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+
+	HANDLE DevInstRegKeyHandle;
+	Status = IoOpenDeviceRegistryKey(m_pPhysicalDevice, PLUGPLAY_REGKEY_DRIVER, KEY_SET_VALUE, &DevInstRegKeyHandle);
+	if (!NT_SUCCESS(Status))
+	{
+		DbgPrint(TRACE_LEVEL_ERROR, ("IoOpenDeviceRegistryKey failed for PDO: 0x%I64x, Status: 0x%I64x", m_pPhysicalDevice, Status));
+		return Status;
+	}
+	UNICODE_STRING ValueName;
+	UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION)+sizeof(ULONG)];
+	PKEY_VALUE_PARTIAL_INFORMATION Value = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
+	ULONG ValueLength = sizeof(Buffer);
+	ULONG ResultLength;
+	ULONG Length;
+
+	RtlInitUnicodeString(&ValueName, L"VgaCompatible");
+
+	Status = ZwQueryValueKey(DevInstRegKeyHandle,
+		&ValueName,
+		KeyValuePartialInformation,
+		Value,
+		ValueLength,
+		&ResultLength);
+
+	if (NT_SUCCESS(Status)) {
+		m_VgaCompatible = *(PULONG)(Value->Data);
+	}
+
+	RtlInitUnicodeString(&ValueName, L"PointerCaps");
+
+	Status = ZwQueryValueKey(DevInstRegKeyHandle,
+		&ValueName,
+		KeyValuePartialInformation,
+		Value,
+		ValueLength,
+		&ResultLength);
+
+	if (NT_SUCCESS(Status)) {
+		m_PointerCaps = *(PULONG)(Value->Data);
+	}
+
+	DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+	return Status;
+}
 
 //
 // Non-Paged Code
