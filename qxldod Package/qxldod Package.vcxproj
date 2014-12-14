@@ -149,7 +149,45 @@
     <VerifyDrivers />
     <VerifyFlags>133563</VerifyFlags>
   </PropertyGroup>
-  <ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8 Debug|Win32'">
+    <Inf2Cat>
+      <WindowsVersionList>8_x86,6_3_x86</WindowsVersionList>
+    </Inf2Cat>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8 Release|Win32'">
+    <Inf2Cat>
+      <WindowsVersionList>8_x86,6_3_x86</WindowsVersionList>
+    </Inf2Cat>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8.1 Debug|Win32'">
+    <Inf2Cat>
+      <WindowsVersionList>8_x86,6_3_x86</WindowsVersionList>
+    </Inf2Cat>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8.1 Release|Win32'">
+    <Inf2Cat>
+      <WindowsVersionList>8_x86,6_3_x86</WindowsVersionList>
+    </Inf2Cat>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8 Debug|x64'">
+    <Inf2Cat>
+      <WindowsVersionList>8_x64,Server8_x64,Server6_3_x64,6_3_x64</WindowsVersionList>
+    </Inf2Cat>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8 Release|x64'">
+    <Inf2Cat>
+      <WindowsVersionList>8_x64,Server8_x64,Server6_3_x64,6_3_x64</WindowsVersionList>
+    </Inf2Cat>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8.1 Debug|x64'">
+    <Inf2Cat>
+      <WindowsVersionList>8_x64,Server8_x64,Server6_3_x64,6_3_x64</WindowsVersionList>
+    </Inf2Cat>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8.1 Release|x64'">
+    <Inf2Cat>
+      <WindowsVersionList>8_x64,Server8_x64,Server6_3_x64,6_3_x64</WindowsVersionList>
+    </Inf2Cat>
   </ItemDefinitionGroup>
   <ItemGroup>
     <FilesToPackage Include="@(Inf->'%(CopyOutput)')" Condition="'@(Inf)'!=''" />

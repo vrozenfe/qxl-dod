@@ -155,7 +155,7 @@
       </ExceptionHandling>
     </ClCompile>
     <PostBuildEvent>
-      <Command>Inf2Cat /driver:$(OutDir) /os:8_X86</Command>
+      <Command>Inf2Cat /driver:$(OutDir) /os:8_X86,6_3_X86</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8 Debug|Win32'">
@@ -171,7 +171,7 @@
       <ExceptionHandling />
     </ClCompile>
     <PostBuildEvent>
-      <Command>Inf2Cat /driver:$(OutDir) /os:8_X86</Command>
+      <Command>Inf2Cat /driver:$(OutDir) /os:8_X86,6_3_X86</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8.1 Release|Win32'">
@@ -186,7 +186,7 @@
       <WarningLevel>Level3</WarningLevel>
     </ClCompile>
     <PostBuildEvent>
-      <Command>Inf2Cat /driver:$(OutDir) /os:8_X86</Command>
+      <Command>Inf2Cat /driver:$(OutDir) /os:8_X86,6_3_X86</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8 Release|Win32'">
@@ -201,7 +201,7 @@
       <WarningLevel>Level3</WarningLevel>
     </ClCompile>
     <PostBuildEvent>
-      <Command>Inf2Cat /driver:$(OutDir) /os:8_X86</Command>
+      <Command>Inf2Cat /driver:$(OutDir) /os:8_X86,6_3_X86</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8.1 Debug|x64'">
@@ -215,7 +215,7 @@
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(DDK_INC_PATH);$(SDK_INC_PATH);.\Include</AdditionalIncludeDirectories>
     </ClCompile>
     <PostBuildEvent>
-      <Command>Inf2Cat /driver:$(OutDir) /os:8_X64</Command>
+      <Command>Inf2Cat /driver:$(OutDir) /os:8_X64,Server8_X64,Server6_3_X64,6_3_X64</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8 Debug|x64'">
@@ -229,7 +229,7 @@
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(DDK_INC_PATH);$(SDK_INC_PATH);.\Include</AdditionalIncludeDirectories>
     </ClCompile>
     <PostBuildEvent>
-      <Command>Inf2Cat /driver:$(OutDir) /os:8_X64</Command>
+      <Command>Inf2Cat /driver:$(OutDir) /os:8_X64,Server8_X64,Server6_3_X64,6_3_X64</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8.1 Release|x64'">
@@ -244,7 +244,7 @@
       <WarningLevel>Level3</WarningLevel>
     </ClCompile>
     <PostBuildEvent>
-      <Command>Inf2Cat /driver:$(OutDir) /os:8_X64</Command>
+      <Command>Inf2Cat /driver:$(OutDir) /os:8_X64,Server8_X64,Server6_3_X64,6_3_X64</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8 Release|x64'">
@@ -259,7 +259,7 @@
       <WarningLevel>Level3</WarningLevel>
     </ClCompile>
     <PostBuildEvent>
-      <Command>Inf2Cat /driver:$(OutDir) /os:8_X64</Command>
+      <Command>Inf2Cat /driver:$(OutDir) /os:8_X64,Server8_X64,Server6_3_X64,6_3_X64</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
