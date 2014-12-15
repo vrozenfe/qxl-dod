@@ -2586,6 +2586,7 @@ NTSTATUS VgaDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     UNREFERENCED_PARAMETER(pResList);
+    UNREFERENCED_PARAMETER(pDispInfo);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return GetModeList(pDispInfo);
 }
@@ -2607,7 +2608,7 @@ NTSTATUS VgaDevice::SetPowerState(_In_  DEVICE_POWER_STATE DevicePowerState, DXG
     switch (DevicePowerState)
     {
         case PowerDeviceUnspecified: 
-		case PowerDeviceD0: regs.Ebx |= 0x1; break;
+        case PowerDeviceD0: regs.Ebx |= 0x1; break;
         case PowerDeviceD1:
         case PowerDeviceD2: 
         case PowerDeviceD3: regs.Ebx |= 0x400; break;
@@ -2802,7 +2803,7 @@ VgaDevice::ExecutePresentDisplayOnly(
     // Copy all the scroll rects from source image to video frame buffer.
     for (UINT i = 0; i < ctx->NumMoves; i++)
     {
-        POINT*   pSourcePoint = &ctx->Moves[i].SourcePoint;
+//        POINT*   pSourcePoint = &ctx->Moves[i].SourcePoint;
         RECT*    pDestRect = &ctx->Moves[i].DestRect;
 
 //        DbgPrint(TRACE_LEVEL_FATAL, ("--- %d SourcePoint.x = %ld, SourcePoint.y = %ld, DestRect.bottom = %ld, DestRect.left = %ld, DestRect.right = %ld, DestRect.top = %ld\n", 
@@ -2905,11 +2906,13 @@ VOID VgaDevice::ResetDevice(VOID)
 
 NTSTATUS  VgaDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape)
 {
+    UNREFERENCED_PARAMETER(pSetPointerShape);
     return STATUS_NOT_SUPPORTED;
 }
 
 NTSTATUS VgaDevice::SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition)
 {
+    UNREFERENCED_PARAMETER(pSetPointerPosition);
     return STATUS_SUCCESS;
 }
 
@@ -3092,7 +3095,7 @@ NTSTATUS QxlDevice::SetPowerState(_In_ DEVICE_POWER_STATE DevicePowerState, DXGK
 NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
-    NTSTATUS Status = STATUS_SUCCESS;
+//    NTSTATUS Status = STATUS_SUCCESS;
     PDXGKRNL_INTERFACE pDxgkInterface = m_pQxlDod->GetDxgkInterrface();
     UINT pci_range = QXL_RAM_RANGE_INDEX;
     for (ULONG i = 0; i < pResList->Count; ++i)
@@ -4121,6 +4124,8 @@ VOID QxlDevice::BltBits (
     LONG height;
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    UNREFERENCED_PARAMETER(NumRects);
+    UNREFERENCED_PARAMETER(pDst);
 
     if (!(drawable = Drawable(QXL_DRAW_COPY, pRects, NULL, 0))) {
         DbgPrint(TRACE_LEVEL_ERROR, ("Cannot get Drawable.\n"));
@@ -4209,7 +4214,7 @@ VOID QxlDevice::PutBytesAlign(QXLDataChunk **chunk_ptr, UINT8 **now_ptr,
     QXLDataChunk *chunk = *chunk_ptr;
     UINT8 *now = *now_ptr;
     UINT8 *end = *end_ptr;
-    int offset;
+//    int offset;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
     while (size) {
@@ -4298,7 +4303,7 @@ NTSTATUS  QxlDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPoi
     QXLCursor *cursor;
     Resource *res;
     QXLDataChunk *chunk;
-    ULONG unique;
+//    ULONG unique;
     UINT8 *src;
     UINT8 *src_end;
     UINT8 *now;
