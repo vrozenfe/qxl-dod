@@ -28,7 +28,7 @@ DriverEntry(
     // Initialize DDI function pointers and dxgkrnl
     KMDDOD_INITIALIZATION_DATA InitialData = {0};
 
-	InitialData.Version = DXGKDDI_INTERFACE_VERSION;
+    InitialData.Version = DXGKDDI_INTERFACE_VERSION;
 
     InitialData.DxgkDdiAddDevice                    = DodAddDevice;
     InitialData.DxgkDdiStartDevice                  = DodStartDevice;
@@ -465,7 +465,7 @@ DodEnumVidPnCofuncModality(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(hAdapter != NULL);
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_FATAL, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())

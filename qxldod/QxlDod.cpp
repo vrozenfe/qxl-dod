@@ -1,5 +1,6 @@
 #include "driver.h"
 #include "qxldod.h"
+#include "qxl_windows.h"
 
 #pragma code_seg(push)
 #pragma code_seg()
@@ -217,7 +218,7 @@ NTSTATUS QxlDod::DispatchIoRequest(_In_  ULONG VidPnSourceId,
     UNREFERENCED_PARAMETER(VidPnSourceId);
     UNREFERENCED_PARAMETER(pVideoRequestPacket);
 
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_FATAL, ("---> %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
 }
 
@@ -458,9 +459,9 @@ NTSTATUS QxlDod::Escape(_In_ CONST DXGKARG_ESCAPE* pEscape)
     PAGED_CODE();
     QXL_ASSERT(pEscape != NULL);
 
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s Flags = %d\n", __FUNCTION__, pEscape->Flags));
+    DbgPrint(TRACE_LEVEL_FATAL, ("<---> %s Flags = %d\n", __FUNCTION__, pEscape->Flags));
 
-    return STATUS_NOT_IMPLEMENTED;
+    return m_pHWDevice->Escape(pEscape);
 }
 
 
@@ -2863,6 +2864,13 @@ NTSTATUS VgaDevice::SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pS
     return STATUS_SUCCESS;
 }
 
+NTSTATUS VgaDevice::Escape(_In_ CONST DXGKARG_ESCAPE* pEscap)
+{
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+    return STATUS_NOT_IMPLEMENTED;
+}
+
 QxlDevice::QxlDevice(_In_ QxlDod* pQxlDod)
 {
     m_pQxlDod = pQxlDod;
@@ -2870,6 +2878,7 @@ QxlDevice::QxlDevice(_In_ QxlDod* pQxlDod)
     m_ModeCount = 0;
     m_ModeNumbers = NULL;
     m_CurrentMode = 0;
+    m_CustomMode = 0;
     m_FreeOutputs = 0;
     m_Pending = 0;
 }
@@ -2917,13 +2926,38 @@ BOOL QxlDevice::SetVideoModeInfo(UINT Idx, QXLMode* pModeInfo)
     return TRUE;
 }
 
+BOOL QxlDevice::UpdateVideoModeInfo(UINT Idx, UINT xres, UINT yres, UINT bpp)
+{
+    PVIDEO_MODE_INFORMATION pMode = NULL;
+    UINT bytes_pp = (bpp + 7) / 8;
+    ULONG color_bits;
+    PAGED_CODE();
+
+    if (xres < MIN_WIDTH_SIZE || yres < MIN_HEIGHT_SIZE || bpp != 32)
+        return FALSE;
+    pMode = &m_ModeInfo[Idx];
+    pMode->VisScreenWidth = xres;
+    pMode->VisScreenHeight = yres;
+    pMode->ScreenStride = (xres * bytes_pp + 3) & ~0x3;
+    pMode->BitsPerPlane = bpp;
+    color_bits = (bpp == 16) ? 5 : 8;
+    pMode->NumberRedBits = color_bits;
+    pMode->NumberGreenBits = color_bits;
+    pMode->NumberBlueBits = color_bits;
+
+    pMode->BlueMask = (1 << color_bits) - 1;
+    pMode->GreenMask = pMode->BlueMask << color_bits;
+    pMode->RedMask = pMode->GreenMask << color_bits;
+    return TRUE;
+}
+
 NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
     PAGED_CODE();
     NTSTATUS Status = STATUS_SUCCESS;
     QXLModes *modes;
     ULONG ModeCount;
-    ULONG SuitableModeCount;
+    USHORT SuitableModeCount;
     USHORT CurrentMode;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
@@ -2946,7 +2980,7 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
     UINT Width = pDispInfo->Width;
     UINT BitsPerPixel = BPPFromPixelFormat(pDispInfo->ColorFormat);
     for (CurrentMode = 0, SuitableModeCount = 0;
-         CurrentMode < ModeCount;
+         CurrentMode < modes->n_modes;
          CurrentMode++)
     {
 
@@ -2958,12 +2992,12 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
             tmpModeInfo->y_res >= Height &&
             tmpModeInfo->bits == 32)
         {
-            m_ModeNumbers[SuitableModeCount] = CurrentMode;
+            m_ModeNumbers[SuitableModeCount] = SuitableModeCount;//CurrentMode;
             SetVideoModeInfo(SuitableModeCount, tmpModeInfo);
             if (tmpModeInfo->x_res == MIN_WIDTH_SIZE &&
                 tmpModeInfo->y_res == MIN_HEIGHT_SIZE)
             {
-                m_CurrentMode = (USHORT)SuitableModeCount;
+                m_CurrentMode = SuitableModeCount;
             }
             SuitableModeCount++;
         }
@@ -2976,9 +3010,17 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
     }
 
 //    m_CurrentMode = m_ModeNumbers[0];
-    m_ModeCount = SuitableModeCount;
+    m_CustomMode = SuitableModeCount;
+    for (CurrentMode = SuitableModeCount;
+         CurrentMode < SuitableModeCount + 2;
+         CurrentMode++)
+    {
+        m_ModeNumbers[CurrentMode] = CurrentMode;
+        memcpy(&m_ModeInfo[CurrentMode], &m_ModeInfo[m_CurrentMode], sizeof(VIDEO_MODE_INFORMATION));
+    }
+    m_ModeCount = SuitableModeCount + 2;
     DbgPrint(TRACE_LEVEL_ERROR, ("ModeCount filtered %d\n", m_ModeCount));
-    for (ULONG idx = 0; idx < m_ModeCount; idx++)
+    for (ULONG idx = 0; idx < GetModeCount(); idx++)
     {
         DbgPrint(TRACE_LEVEL_ERROR, ("type %x, XRes = %d, YRes = %d, BPP = %d\n",
                                     m_ModeNumbers[idx],
@@ -3002,7 +3044,7 @@ NTSTATUS QxlDevice::QueryCurrentMode(PVIDEO_MODE RequestedMode)
 NTSTATUS QxlDevice::SetCurrentMode(ULONG Mode)
 {
     DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s Mode = %x\n", __FUNCTION__, Mode));
-    for (ULONG idx = 0; idx < m_ModeCount; idx++)
+    for (ULONG idx = 0; idx < GetModeCount(); idx++)
     {
         if (Mode == m_ModeNumbers[idx])
         {
@@ -4325,7 +4367,7 @@ NTSTATUS QxlDevice::SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pS
         QXLCursorCmd *cursor_cmd = CursorCmd();
         if (pSetPointerPosition->X < 0) {
            cursor_cmd->type = QXL_CURSOR_HIDE;
-	} else {
+    } else {
            cursor_cmd->type = QXL_CURSOR_MOVE;
            cursor_cmd->u.position.x = (INT16)pSetPointerPosition->X;
            cursor_cmd->u.position.y = (INT16)pSetPointerPosition->Y;
@@ -4334,6 +4376,42 @@ NTSTATUS QxlDevice::SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pS
     }
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
+}
+
+NTSTATUS QxlDevice::Escape(_In_ CONST DXGKARG_ESCAPE* pEscap)
+{
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    QXLEscapeSetCustomDisplay *custom_display;
+    UINT xres;
+    UINT yres;
+    UINT bpp;
+
+    if (pEscap->PrivateDriverDataSize != sizeof(QXLEscapeSetCustomDisplay)) {
+        DbgPrint(TRACE_LEVEL_FATAL, ("<--> %s Incorrect buffer size %d instead of %d\n", __FUNCTION__, pEscap->PrivateDriverDataSize, sizeof(QXLEscapeSetCustomDisplay)));
+        return STATUS_INVALID_BUFFER_SIZE;
+    }
+    custom_display = (QXLEscapeSetCustomDisplay*)pEscap->pPrivateDriverData;
+    xres = custom_display->xres;
+    yres = custom_display->yres;
+    bpp = custom_display->bpp;
+
+    /* alternate custom mode index */
+    if (m_CustomMode == (m_ModeCount - 1))
+        m_CustomMode = (USHORT)(m_ModeCount - 2);
+    else
+        m_CustomMode = (USHORT)(m_ModeCount - 1);
+
+    if ((xres * yres * bpp / 8) > m_RomHdr->surface0_area_size) {
+        DbgPrint(TRACE_LEVEL_FATAL, ("%s: Mode (%dx%d#%d) doesn't fit in memory (%d)\n",
+                    __FUNCTION__, xres, yres, bpp, m_RomHdr->surface0_area_size));
+        return ERROR_NOT_ENOUGH_MEMORY;
+    }
+    if (!UpdateVideoModeInfo(m_CustomMode, xres, yres, bpp)) {
+        return ERROR_INVALID_DATA;
+    }
+    DbgPrint(TRACE_LEVEL_FATAL, ("<--> %s xres %d yres %d bpp %d\n", __FUNCTION__, xres, yres, bpp));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+    return STATUS_SUCCESS;// SetCurrentMode(m_CustomMode);
 }
 
 VOID QxlDevice::WaitForCmdRing()
