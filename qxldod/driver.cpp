@@ -465,7 +465,7 @@ DodEnumVidPnCofuncModality(
 {
     PAGED_CODE();
     QXL_ASSERT_CHK(hAdapter != NULL);
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_FATAL, ("<---> %s\n", __FUNCTION__));
 
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())

@@ -223,7 +223,7 @@ public:
     virtual VOID DpcRoutine(PVOID) = 0;
     virtual VOID ResetDevice(void) = 0;
 
-    ULONG GetModeCount(void) {return m_ModeCount;}
+    virtual ULONG GetModeCount(void) = 0;
     PVIDEO_MODE_INFORMATION GetModeInfo(UINT idx) {return &m_ModeInfo[idx];}
     USHORT GetModeNumber(USHORT idx) {return m_ModeNumbers[idx];}
     USHORT GetCurrentModeIndex(void) {return m_CurrentMode;}
@@ -244,6 +244,7 @@ public:
     virtual VOID BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod) = 0;
     virtual NTSTATUS SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape) = 0;
     virtual NTSTATUS SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition) = 0;
+    virtual NTSTATUS Escape(_In_ CONST DXGKARG_ESCAPE* pEscap) = 0;
     ULONG GetId(void) { return m_Id; }
 protected:
     virtual NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
@@ -253,6 +254,7 @@ protected:
     ULONG m_ModeCount;
     PUSHORT m_ModeNumbers;
     USHORT m_CurrentMode;
+    USHORT m_CustomMode;
     ULONG  m_Id;
 };
 
@@ -265,6 +267,7 @@ public:
     NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode);
     NTSTATUS SetCurrentMode(ULONG Mode);
     NTSTATUS GetCurrentMode(ULONG* Mode);
+    ULONG GetModeCount(void) {return m_ModeCount;}
     NTSTATUS SetPowerState(DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWClose(void);
@@ -286,6 +289,7 @@ public:
     VOID ResetDevice(VOID);
     NTSTATUS SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape);
     NTSTATUS SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition);
+    NTSTATUS Escape(_In_ CONST DXGKARG_ESCAPE* pEscap);
 protected:
     NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
 private:
@@ -418,6 +422,7 @@ public:
     NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode);
     NTSTATUS SetCurrentMode(ULONG Mode);
     NTSTATUS GetCurrentMode(ULONG* Mode);
+    ULONG GetModeCount(void) {return m_ModeCount/* - 2*/;}
     NTSTATUS SetPowerState(DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWClose(void);
@@ -439,6 +444,7 @@ public:
     VOID ResetDevice(VOID);
     NTSTATUS SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape);
     NTSTATUS SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition);
+    NTSTATUS Escape(_In_ CONST DXGKARG_ESCAPE* pEscap);
 protected:
     NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
     VOID BltBits (BLT_INFO* pDst,
@@ -465,6 +471,7 @@ private:
     void QxlClose(void);
     void UnmapMemory(void);
     BOOL SetVideoModeInfo(UINT Idx, QXLMode* pModeInfo);
+    BOOL UpdateVideoModeInfo(UINT Idx, UINT xres, UINT yres, UINT bpp);
     BOOL InitMemSlots(void);
     BOOL CreateMemSlots(void);
     void DestroyMemSlots(void);
