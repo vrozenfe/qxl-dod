@@ -218,7 +218,7 @@ NTSTATUS QxlDod::DispatchIoRequest(_In_  ULONG VidPnSourceId,
     UNREFERENCED_PARAMETER(VidPnSourceId);
     UNREFERENCED_PARAMETER(pVideoRequestPacket);
 
-    DbgPrint(TRACE_LEVEL_FATAL, ("---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
 }
 
@@ -457,11 +457,27 @@ NTSTATUS QxlDod::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointer
 NTSTATUS QxlDod::Escape(_In_ CONST DXGKARG_ESCAPE* pEscape)
 {
     PAGED_CODE();
+    NTSTATUS Status = STATUS_SUCCESS;
     QXL_ASSERT(pEscape != NULL);
 
-    DbgPrint(TRACE_LEVEL_FATAL, ("<---> %s Flags = %d\n", __FUNCTION__, pEscape->Flags));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s Flags = %d\n", __FUNCTION__, pEscape->Flags));
 
-    return m_pHWDevice->Escape(pEscape);
+    Status = m_pHWDevice->Escape(pEscape);
+    if (Status == STATUS_SUCCESS)
+    {
+        DXGK_CHILD_STATUS ChildStatus;
+        ChildStatus.Type = StatusConnection;
+        ChildStatus.ChildUid = 0;
+        ChildStatus.HotPlug.Connected = FALSE;
+        Status = m_DxgkInterface.DxgkCbIndicateChildStatus(m_DxgkInterface.DeviceHandle, &ChildStatus);
+        if (Status == STATUS_SUCCESS)
+        {
+            ChildStatus.HotPlug.Connected = TRUE;
+            Status = m_DxgkInterface.DxgkCbIndicateChildStatus(m_DxgkInterface.DeviceHandle, &ChildStatus);
+        }
+    }
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s Status = %x\n", __FUNCTION__, Status));
+    return Status;
 }
 
 
@@ -2473,7 +2489,7 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
     DbgPrint(TRACE_LEVEL_INFORMATION, ("ModeCount filtered %d\n", m_ModeCount));
     for (ULONG idx = 0; idx < m_ModeCount; idx++)
     {
-        DbgPrint(TRACE_LEVEL_ERROR, ("type %x, XRes = %d, YRes = %d, BPP = %d\n",
+        DbgPrint(TRACE_LEVEL_INFORMATION, ("type %x, XRes = %d, YRes = %d, BPP = %d\n",
                                     m_ModeNumbers[idx],
                                     m_ModeInfo[idx].VisScreenWidth,
                                     m_ModeInfo[idx].VisScreenHeight,
@@ -2926,15 +2942,13 @@ BOOL QxlDevice::SetVideoModeInfo(UINT Idx, QXLMode* pModeInfo)
     return TRUE;
 }
 
-BOOL QxlDevice::UpdateVideoModeInfo(UINT Idx, UINT xres, UINT yres, UINT bpp)
+void QxlDevice::UpdateVideoModeInfo(UINT Idx, UINT xres, UINT yres, UINT bpp)
 {
     PVIDEO_MODE_INFORMATION pMode = NULL;
     UINT bytes_pp = (bpp + 7) / 8;
     ULONG color_bits;
     PAGED_CODE();
 
-    if (xres < MIN_WIDTH_SIZE || yres < MIN_HEIGHT_SIZE || bpp != 32)
-        return FALSE;
     pMode = &m_ModeInfo[Idx];
     pMode->VisScreenWidth = xres;
     pMode->VisScreenHeight = yres;
@@ -2948,7 +2962,6 @@ BOOL QxlDevice::UpdateVideoModeInfo(UINT Idx, UINT xres, UINT yres, UINT bpp)
     pMode->BlueMask = (1 << color_bits) - 1;
     pMode->GreenMask = pMode->BlueMask << color_bits;
     pMode->RedMask = pMode->GreenMask << color_bits;
-    return TRUE;
 }
 
 NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
@@ -2969,7 +2982,7 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
         return STATUS_UNSUCCESSFUL;
     }
 
-    DbgPrint(TRACE_LEVEL_ERROR, ("%s: ModeCount = %d\n", __FUNCTION__, ModeCount));
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("%s: ModeCount = %d\n", __FUNCTION__, ModeCount));
 
     ModeCount += 2;
     m_ModeInfo = reinterpret_cast<PVIDEO_MODE_INFORMATION> (new (PagedPool) BYTE[sizeof (VIDEO_MODE_INFORMATION) * ModeCount]);
@@ -2986,11 +2999,11 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
 
         QXLMode* tmpModeInfo = &modes->modes[CurrentMode];
 
-        DbgPrint(TRACE_LEVEL_ERROR, ("%s: modes[%d] x_res = %d, y_res = %d, bits = %d BitsPerPixel = %d\n", __FUNCTION__, CurrentMode, tmpModeInfo->x_res, tmpModeInfo->y_res, tmpModeInfo->bits, BitsPerPixel));
+        DbgPrint(TRACE_LEVEL_INFORMATION, ("%s: modes[%d] x_res = %d, y_res = %d, bits = %d BitsPerPixel = %d\n", __FUNCTION__, CurrentMode, tmpModeInfo->x_res, tmpModeInfo->y_res, tmpModeInfo->bits, BitsPerPixel));
 
         if (tmpModeInfo->x_res >= Width &&
             tmpModeInfo->y_res >= Height &&
-            tmpModeInfo->bits == 32)
+            tmpModeInfo->bits == QXL_BPP)
         {
             m_ModeNumbers[SuitableModeCount] = SuitableModeCount;//CurrentMode;
             SetVideoModeInfo(SuitableModeCount, tmpModeInfo);
@@ -3019,10 +3032,10 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
         memcpy(&m_ModeInfo[CurrentMode], &m_ModeInfo[m_CurrentMode], sizeof(VIDEO_MODE_INFORMATION));
     }
     m_ModeCount = SuitableModeCount + 2;
-    DbgPrint(TRACE_LEVEL_ERROR, ("ModeCount filtered %d\n", m_ModeCount));
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("ModeCount filtered %d\n", m_ModeCount));
     for (ULONG idx = 0; idx < GetModeCount(); idx++)
     {
-        DbgPrint(TRACE_LEVEL_ERROR, ("type %x, XRes = %d, YRes = %d, BPP = %d\n",
+        DbgPrint(TRACE_LEVEL_INFORMATION, ("type %x, XRes = %d, YRes = %d, BPP = %d\n",
                                     m_ModeNumbers[idx],
                                     m_ModeInfo[idx].VisScreenWidth,
                                     m_ModeInfo[idx].VisScreenHeight,
@@ -4394,8 +4407,16 @@ NTSTATUS QxlDevice::Escape(_In_ CONST DXGKARG_ESCAPE* pEscap)
     xres = custom_display->xres;
     yres = custom_display->yres;
     bpp = custom_display->bpp;
+    if (bpp != QXL_BPP)
+    {
+        bpp = QXL_BPP;
+    }
+    if (xres < MIN_WIDTH_SIZE || yres < MIN_HEIGHT_SIZE)
+    {
+        DbgPrint(TRACE_LEVEL_FATAL, ("%s: xres = %d, yres = %d\n", __FUNCTION__, xres, yres));
+        return ERROR_INVALID_DATA;
+    }
 
-    /* alternate custom mode index */
     if (m_CustomMode == (m_ModeCount - 1))
         m_CustomMode = (USHORT)(m_ModeCount - 2);
     else
@@ -4406,12 +4427,9 @@ NTSTATUS QxlDevice::Escape(_In_ CONST DXGKARG_ESCAPE* pEscap)
                     __FUNCTION__, xres, yres, bpp, m_RomHdr->surface0_area_size));
         return ERROR_NOT_ENOUGH_MEMORY;
     }
-    if (!UpdateVideoModeInfo(m_CustomMode, xres, yres, bpp)) {
-        return ERROR_INVALID_DATA;
-    }
-    DbgPrint(TRACE_LEVEL_FATAL, ("<--> %s xres %d yres %d bpp %d\n", __FUNCTION__, xres, yres, bpp));
+    UpdateVideoModeInfo(m_CustomMode, xres, yres, bpp);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
-    return STATUS_SUCCESS;// SetCurrentMode(m_CustomMode);
+    return STATUS_SUCCESS;
 }
 
 VOID QxlDevice::WaitForCmdRing()
@@ -4516,15 +4534,15 @@ VOID QxlDevice::DpcRoutine(PVOID ptr)
     ASSERT(Status == STATUS_SUCCESS);
 
     if (ctx.data & QXL_INTERRUPT_DISPLAY) {
-        DbgPrint(TRACE_LEVEL_FATAL, ("---> %s m_DisplayEvent\n", __FUNCTION__));
+        DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s m_DisplayEvent\n", __FUNCTION__));
         KeSetEvent (&m_DisplayEvent, IO_NO_INCREMENT, FALSE);
     }
     if (ctx.data & QXL_INTERRUPT_CURSOR) {
-        DbgPrint(TRACE_LEVEL_FATAL, ("---> %s m_CursorEvent\n", __FUNCTION__));
+        DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s m_CursorEvent\n", __FUNCTION__));
         KeSetEvent (&m_CursorEvent, IO_NO_INCREMENT, FALSE);
     }
     if (ctx.data & QXL_INTERRUPT_IO_CMD) {
-        DbgPrint(TRACE_LEVEL_FATAL, ("---> %s m_IoCmdEvent\n", __FUNCTION__));
+        DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s m_IoCmdEvent\n", __FUNCTION__));
         KeSetEvent (&m_IoCmdEvent, IO_NO_INCREMENT, FALSE);
     }
     m_RamHdr->int_mask = QXL_INTERRUPT_MASK;
