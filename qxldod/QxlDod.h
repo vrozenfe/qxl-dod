@@ -10,6 +10,7 @@
 #define POINTER_SIZE               64
 #define MIN_WIDTH_SIZE             1024
 #define MIN_HEIGHT_SIZE            768
+#define QXL_BPP                    32
 
 typedef struct _QXL_FLAGS
 {
@@ -471,7 +472,7 @@ private:
     void QxlClose(void);
     void UnmapMemory(void);
     BOOL SetVideoModeInfo(UINT Idx, QXLMode* pModeInfo);
-    BOOL UpdateVideoModeInfo(UINT Idx, UINT xres, UINT yres, UINT bpp);
+    void UpdateVideoModeInfo(UINT Idx, UINT xres, UINT yres, UINT bpp);
     BOOL InitMemSlots(void);
     BOOL CreateMemSlots(void);
     void DestroyMemSlots(void);
