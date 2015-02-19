@@ -2404,7 +2404,9 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
     VBE_INFO VbeInfo = {0};
     ULONG Length;
     VBE_MODEINFO tmpModeInfo;
-
+    UINT Height = pDispInfo->Height;
+    UINT Width = pDispInfo->Width;
+    UINT BitsPerPixel = BPPFromPixelFormat(pDispInfo->ColorFormat);
     NTSTATUS Status = STATUS_SUCCESS;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 //Get VBE Mode List
@@ -2451,6 +2453,7 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
     DbgPrint(TRACE_LEVEL_INFORMATION, ("VBE BIOS Present (%d.%d, %8ld Kb)\n", VbeInfo.Version / 0x100, VbeInfo.Version & 0xFF, VbeInfo.TotalMemory * 64));
     DbgPrint(TRACE_LEVEL_INFORMATION, ("Capabilities = 0x%x\n", VbeInfo.Capabilities));
     DbgPrint(TRACE_LEVEL_INFORMATION, ("VideoModePtr = 0x%x (0x%x.0x%x)\n", VbeInfo.VideoModePtr, HIWORD( VbeInfo.VideoModePtr), LOWORD( VbeInfo.VideoModePtr)));
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("pDispInfo = %p %dx%d@%d\n", pDispInfo, Width, Height, BitsPerPixel));
 
    for (ModeCount = 0; ; ModeCount++)
    {
@@ -2478,7 +2481,13 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
     m_ModeInfo = reinterpret_cast<PVIDEO_MODE_INFORMATION> (new (PagedPool) BYTE[sizeof (VIDEO_MODE_INFORMATION) * ModeCount]);
     m_ModeNumbers = reinterpret_cast<PUSHORT> (new (PagedPool)  BYTE [sizeof (USHORT) * ModeCount]);
     m_CurrentMode = 0;
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("m_ModeInfo = 0x%p, m_ModeNumbers = 0x%p\n", m_ModeInfo, m_ModeNumbers)); 
+    DbgPrint(TRACE_LEVEL_INFORMATION, ("m_ModeInfo = 0x%p, m_ModeNumbers = 0x%p\n", m_ModeInfo, m_ModeNumbers));
+    if (Width == 0 || Height == 0 || BitsPerPixel != VGA_BPP)
+    {
+        Width = MIN_WIDTH_SIZE;
+        Height = MIN_HEIGHT_SIZE;
+        BitsPerPixel = VGA_BPP;
+    }
     for (CurrentMode = 0, SuitableModeCount = 0;
          CurrentMode < ModeCount;
          CurrentMode++)
@@ -2495,7 +2504,6 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
             break;
         }
 
-        DbgPrint(TRACE_LEVEL_INFORMATION, ("ModeTemp = 0x%X\n", ModeTemp));
         RtlZeroMemory(&regs, sizeof(regs));
         regs.Eax = 0x4F01;
         regs.Ecx = ModeTemp;
@@ -2512,9 +2520,7 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
                     &tmpModeInfo,
                     sizeof(VBE_MODEINFO));
 
-        UINT Height = pDispInfo->Height;
-        UINT Width = pDispInfo->Width;
-        UINT BitsPerPixel = BPPFromPixelFormat(pDispInfo->ColorFormat);
+        DbgPrint(TRACE_LEVEL_INFORMATION, ("ModeTemp = 0x%X %dx%d@%d\n", ModeTemp, tmpModeInfo.XResolution, tmpModeInfo.YResolution, tmpModeInfo.BitsPerPixel));
 
         if (tmpModeInfo.XResolution >= Width &&
             tmpModeInfo.YResolution >= Height &&
@@ -3045,6 +3051,13 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
     UINT Height = pDispInfo->Height;
     UINT Width = pDispInfo->Width;
     UINT BitsPerPixel = BPPFromPixelFormat(pDispInfo->ColorFormat);
+    if (Width == 0 || Height == 0 || BitsPerPixel != QXL_BPP)
+    {
+        Width = MIN_WIDTH_SIZE;
+        Height = MIN_HEIGHT_SIZE;
+        BitsPerPixel = QXL_BPP;
+    }
+
     for (CurrentMode = 0, SuitableModeCount = 0;
          CurrentMode < modes->n_modes;
          CurrentMode++)
@@ -3075,7 +3088,6 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
         Status = STATUS_UNSUCCESSFUL;
     }
 
-//    m_CurrentMode = m_ModeNumbers[0];
     m_CustomMode = SuitableModeCount;
     for (CurrentMode = SuitableModeCount;
          CurrentMode < SuitableModeCount + 2;
@@ -4307,25 +4319,28 @@ VOID QxlDevice::BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod)
     QXLDrawable *drawable;
     RECT Rect;
     PAGED_CODE();
-return;
+
     DbgPrint(TRACE_LEVEL_FATAL, ("---> %s\n", __FUNCTION__));
-    Rect.bottom = pCurrentBddMod->SrcModeHeight;
-    Rect.top = 0;
-    Rect.left = 0;
-    Rect.right = pCurrentBddMod->SrcModeWidth;
-    if (!(drawable = Drawable(QXL_DRAW_FILL, &Rect, NULL, 0))) {
-        DbgPrint(TRACE_LEVEL_ERROR, ("Cannot get Drawable.\n"));
+    if (pCurrentBddMod->Flags.FrameBufferIsActive)
+    {
+        Rect.bottom = pCurrentBddMod->SrcModeHeight;
+        Rect.top = 0;
+        Rect.left = 0;
+        Rect.right = pCurrentBddMod->SrcModeWidth;
+        if (!(drawable = Drawable(QXL_DRAW_FILL, &Rect, NULL, 0)))
+        {
+            DbgPrint(TRACE_LEVEL_ERROR, ("Cannot get Drawable.\n"));
+            return;
+        }
+        drawable->u.fill.brush.type = SPICE_BRUSH_TYPE_SOLID;
+        drawable->u.fill.brush.u.color = 0;
+        drawable->u.fill.rop_descriptor = SPICE_ROPD_OP_PUT;
+        drawable->u.fill.mask.flags = 0;
+        drawable->u.fill.mask.pos.x = 0;
+        drawable->u.fill.mask.pos.y = 0;
+        drawable->u.fill.mask.bitmap = 0;
+        PushDrawable(drawable);
     }
-
-    drawable->u.fill.brush.type = SPICE_BRUSH_TYPE_SOLID;
-    drawable->u.fill.brush.u.color = 0;
-    drawable->u.fill.rop_descriptor = SPICE_ROPD_OP_PUT;
-    drawable->u.fill.mask.flags = 0;
-    drawable->u.fill.mask.pos.x = 0;
-    drawable->u.fill.mask.pos.y = 0;
-    drawable->u.fill.mask.bitmap = 0;
-    PushDrawable(drawable);
-
     DbgPrint(TRACE_LEVEL_FATAL, ("<--- %s\n", __FUNCTION__));
 }
 

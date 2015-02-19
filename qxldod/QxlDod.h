@@ -11,6 +11,7 @@
 #define MIN_WIDTH_SIZE             1024
 #define MIN_HEIGHT_SIZE            768
 #define QXL_BPP                    32
+#define VGA_BPP                    24
 
 typedef struct _QXL_FLAGS
 {
