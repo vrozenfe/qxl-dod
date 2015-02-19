@@ -9,7 +9,7 @@
 // Driver Entry point
 //
 
-int nDebugLevel = TRACE_LEVEL_ERROR;
+int nDebugLevel = TRACE_LEVEL_INFORMATION;
 
 
 extern "C"
