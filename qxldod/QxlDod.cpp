@@ -3018,7 +3018,7 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
             tmpModeInfo->y_res >= Height &&
             tmpModeInfo->bits == QXL_BPP)
         {
-            m_ModeNumbers[SuitableModeCount] = SuitableModeCount;//CurrentMode;
+            m_ModeNumbers[SuitableModeCount] = SuitableModeCount;
             SetVideoModeInfo(SuitableModeCount, tmpModeInfo);
             if (tmpModeInfo->x_res == MIN_WIDTH_SIZE &&
                 tmpModeInfo->y_res == MIN_HEIGHT_SIZE)
@@ -4419,8 +4419,8 @@ NTSTATUS QxlDevice::Escape(_In_ CONST DXGKARG_ESCAPE* pEscap)
         return STATUS_INVALID_BUFFER_SIZE;
     }
     custom_display = (QXLEscapeSetCustomDisplay*)pEscap->pPrivateDriverData;
-    xres = custom_display->xres;
-    yres = custom_display->yres;
+    xres = (custom_display->xres + 3) & ~0x3;
+    yres = (custom_display->yres +3) & ~0x3;
     bpp = custom_display->bpp;
     if (bpp != QXL_BPP)
     {
