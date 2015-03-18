@@ -3267,7 +3267,7 @@ NTSTATUS QxlDevice::QxlInit(DXGK_DISPLAY_INFORMATION* pDispInfo)
 
     WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_RESET), 0);
     CreateRings();
-    m_RamHdr->int_mask = QXL_INTERRUPT_MASK;
+    m_RamHdr->int_mask = ~0;
     CreateMemSlots();
     InitDeviceMemoryResources();
     return Status;
@@ -4419,8 +4419,8 @@ NTSTATUS QxlDevice::Escape(_In_ CONST DXGKARG_ESCAPE* pEscap)
         return STATUS_INVALID_BUFFER_SIZE;
     }
     custom_display = (QXLEscapeSetCustomDisplay*)pEscap->pPrivateDriverData;
-    xres = (custom_display->xres + 3) & ~0x3;
-    yres = (custom_display->yres +3) & ~0x3;
+    xres = custom_display->xres & ~0x3;
+    yres = custom_display->yres & ~0x3;
     bpp = custom_display->bpp;
     if (bpp != QXL_BPP)
     {
@@ -4525,7 +4525,7 @@ BOOLEAN QxlDevice::InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_
 
     pDxgkInterface->DxgkCbNotifyInterrupt(pDxgkInterface->DeviceHandle,&notifyInt);
     if (!pDxgkInterface->DxgkCbQueueDpc(pDxgkInterface->DeviceHandle)) {
-        m_RamHdr->int_mask = QXL_INTERRUPT_MASK;
+        m_RamHdr->int_mask = ~0;
         WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_UPDATE_IRQ), 0);
         DbgPrint(TRACE_LEVEL_FATAL, ("---> %s DxgkCbQueueDpc failed\n", __FUNCTION__));
     }
@@ -4560,7 +4560,7 @@ VOID QxlDevice::DpcRoutine(PVOID ptr)
         DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s m_IoCmdEvent\n", __FUNCTION__));
         KeSetEvent (&m_IoCmdEvent, IO_NO_INCREMENT, FALSE);
     }
-    m_RamHdr->int_mask = QXL_INTERRUPT_MASK;
+    m_RamHdr->int_mask = ~0;
     WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_UPDATE_IRQ), 0);
 
     DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
