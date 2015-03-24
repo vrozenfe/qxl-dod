@@ -136,11 +136,18 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
     Status = CheckHardware();
     if (NT_SUCCESS(Status))
     {
-        m_pHWDevice = new(PagedPool) QxlDevice(this);
+        m_pHWDevice = new(NonPagedPoolNx) QxlDevice(this);
     }
     else
     {
-        m_pHWDevice = new(PagedPool) VgaDevice(this);
+        m_pHWDevice = new(NonPagedPoolNx) VgaDevice(this);
+    }
+
+    if (!m_pHWDevice)
+    {
+        Status = STATUS_NO_MEMORY;
+        DbgPrint(TRACE_LEVEL_ERROR, ("HWInit failed to allocate memory\n"));
+        return Status;
     }
 
     Status = m_pHWDevice->HWInit(m_DeviceInfo.TranslatedResourceList, &m_CurrentModes[0].DispInfo);
@@ -401,9 +408,7 @@ NTSTATUS QxlDod::QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO* pQueryAda
             }
 
             DXGK_DRIVERCAPS* pDriverCaps = (DXGK_DRIVERCAPS*)pQueryAdapterInfo->pOutputData;
-
-			RtlZeroMemory(pDriverCaps, pQueryAdapterInfo->OutputDataSize/*sizeof(DXGK_DRIVERCAPS)*/);
-
+            RtlZeroMemory(pDriverCaps, pQueryAdapterInfo->OutputDataSize/*sizeof(DXGK_DRIVERCAPS)*/);
             pDriverCaps->WDDMVersion = DXGKDDI_WDDMv1_2;
             pDriverCaps->HighestAcceptableAddress.QuadPart = -1;
 
@@ -549,7 +554,7 @@ NTSTATUS QxlDod::QueryInterface(_In_ CONST PQUERY_INTERFACE pQueryInterface)
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s Version = %d\n", __FUNCTION__, pQueryInterface->Version));
 
-    return STATUS_NOT_IMPLEMENTED;
+    return STATUS_NOT_SUPPORTED;
 }
 
 NTSTATUS QxlDod::StopDeviceAndReleasePostDisplayOwnership(_In_  D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
@@ -2426,7 +2431,23 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
     DbgPrint(TRACE_LEVEL_INFORMATION, ("ModeCount %d\n", ModeCount));
 
     m_ModeInfo = reinterpret_cast<PVIDEO_MODE_INFORMATION> (new (PagedPool) BYTE[sizeof (VIDEO_MODE_INFORMATION) * ModeCount]);
+    if (!m_ModeInfo)
+    {
+        Status = STATUS_NO_MEMORY;
+        DbgPrint(TRACE_LEVEL_ERROR, ("VgaDevice::GetModeList failed to allocate m_ModeInfo memory\n"));
+        return Status;
+    }
+    RtlZeroMemory(m_ModeInfo, sizeof (VIDEO_MODE_INFORMATION) * ModeCount);
+
     m_ModeNumbers = reinterpret_cast<PUSHORT> (new (PagedPool)  BYTE [sizeof (USHORT) * ModeCount]);
+    if (!m_ModeNumbers)
+    {
+        Status = STATUS_NO_MEMORY;
+        DbgPrint(TRACE_LEVEL_ERROR, ("VgaDevice::GetModeList failed to allocate m_ModeNumbers memory\n"));
+        return Status;
+    }
+    RtlZeroMemory(m_ModeNumbers, sizeof (USHORT) * ModeCount);
+
     m_CurrentMode = 0;
     DbgPrint(TRACE_LEVEL_INFORMATION, ("m_ModeInfo = 0x%p, m_ModeNumbers = 0x%p\n", m_ModeInfo, m_ModeNumbers));
     if (Width == 0 || Height == 0 || BitsPerPixel != VGA_BPP)
@@ -2992,7 +3013,23 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
 
     ModeCount += 2;
     m_ModeInfo = reinterpret_cast<PVIDEO_MODE_INFORMATION> (new (PagedPool) BYTE[sizeof (VIDEO_MODE_INFORMATION) * ModeCount]);
+    if (!m_ModeInfo)
+    {
+        Status = STATUS_NO_MEMORY;
+        DbgPrint(TRACE_LEVEL_ERROR, ("QxlDevice::GetModeList failed to allocate m_ModeInfo memory\n"));
+        return Status;
+    }
+    RtlZeroMemory(m_ModeInfo, sizeof (VIDEO_MODE_INFORMATION) * ModeCount);
+
     m_ModeNumbers = reinterpret_cast<PUSHORT> (new (PagedPool)  BYTE [sizeof (USHORT) * ModeCount]);
+    if (!m_ModeNumbers)
+    {
+        Status = STATUS_NO_MEMORY;
+        DbgPrint(TRACE_LEVEL_ERROR, ("QxlDevice::GetModeList failed to allocate m_ModeNumbers memory\n"));
+        return Status;
+    }
+    RtlZeroMemory(m_ModeNumbers, sizeof (USHORT) * ModeCount);
+
     m_CurrentMode = 0;
 
     UINT Height = pDispInfo->Height;
@@ -3423,32 +3460,20 @@ BOOL QxlDevice::CreateRings()
 void QxlDevice::AsyncIo(UCHAR  Port, UCHAR Value)
 {
     LARGE_INTEGER timeout;
-    KeWaitForSingleObject
-    (
-        &m_IoLock,
-        Executive,
-        KernelMode,
-        FALSE,
-        NULL
-    );
+    BOOLEAN locked = FALSE;
+    locked = WaitForObject(&m_IoLock, NULL);
     WRITE_PORT_UCHAR(m_IoBase + Port, Value);
     timeout.QuadPart = -60000L * 1000 * 10;
-    WAIT_FOR_EVENT(m_IoCmdEvent, &timeout);
-    KeReleaseMutex(&m_IoLock,FALSE);
+    WaitForObject(&m_IoCmdEvent, &timeout);
+    ReleaseMutex(&m_IoLock, locked);
 }
 
 void QxlDevice::SyncIo(UCHAR  Port, UCHAR Value)
 {
-    KeWaitForSingleObject
-    (
-        &m_IoLock,
-        Executive,
-        KernelMode,
-        FALSE,
-        NULL
-    );
+    BOOLEAN locked = FALSE;
+    locked = WaitForObject(&m_IoLock, NULL);
     WRITE_PORT_UCHAR(m_IoBase + Port, Value);
-    KeReleaseMutex(&m_IoLock,FALSE);
+    ReleaseMutex(&m_IoLock, locked);
 }
 
 UINT8 QxlDevice::SetupMemSlot(UINT8 Idx, UINT64 pastart, UINT64 paend, UINT64 vastart, UINT64 vaend)
@@ -3728,7 +3753,7 @@ void QxlDevice::WaitForReleaseRing(void)
         }
 
         timeout.QuadPart = -30 * 1000 * 10; //30ms
-        WAIT_FOR_EVENT(m_DisplayEvent, &timeout);
+        WaitForObject(&m_DisplayEvent, &timeout);
 
         if (SPICE_RING_IS_EMPTY(m_ReleaseRing)) {
             SyncIo(QXL_IO_NOTIFY_OOM, 0);
@@ -3770,18 +3795,12 @@ void QxlDevice::FlushReleaseRing()
 
 void QxlDevice::EmptyReleaseRing()
 {
-    KeWaitForSingleObject
-    (
-        &m_MemLock,
-        Executive,
-        KernelMode,
-        FALSE,
-        NULL
-    );
+    BOOLEAN locked = FALSE;
+    locked = WaitForObject(&m_MemLock, NULL);
     while (m_FreeOutputs || !SPICE_RING_IS_EMPTY(m_ReleaseRing)) {
         FlushReleaseRing();
     }
-    KeReleaseMutex(&m_MemLock,FALSE);
+    ReleaseMutex(&m_MemLock, locked);
 }
 
 UINT64 QxlDevice::ReleaseOutput(UINT64 output_id)
@@ -3806,6 +3825,7 @@ UINT64 QxlDevice::ReleaseOutput(UINT64 output_id)
 void *QxlDevice::AllocMem(UINT32 mspace_type, size_t size, BOOL force)
 {
     PVOID ptr;
+    BOOLEAN locked = FALSE;
 
     ASSERT(m_MSInfo[mspace_type]._mspace);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("--->%s: %p(%d) size %u\n", __FUNCTION__,
@@ -3816,14 +3836,7 @@ void *QxlDevice::AllocMem(UINT32 mspace_type, size_t size, BOOL force)
      mspace_malloc_stats(m_MSInfo[mspace_type]._mspace);
 #endif
 
-    KeWaitForSingleObject
-    (
-        &m_MemLock,
-        Executive,
-        KernelMode,
-        FALSE,
-        NULL
-    );
+    locked = WaitForObject(&m_MemLock, NULL);
 
     while (1) {
         /* Release lots of queued resources, before allocating, as we
@@ -3849,7 +3862,7 @@ void *QxlDevice::AllocMem(UINT32 mspace_type, size_t size, BOOL force)
             break;
         }
     }
-    KeReleaseMutex(&m_MemLock,FALSE);
+    ReleaseMutex(&m_MemLock, locked);
 
     ASSERT((!ptr && !force) || (ptr >= m_MSInfo[mspace_type].mspace_start &&
                                       ptr < m_MSInfo[mspace_type].mspace_end));
@@ -3870,16 +3883,10 @@ void QxlDevice::FreeMem(UINT32 mspace_type, void *ptr)
             m_MSInfo[mspace_type].mspace_end, mspace_type));
     }
 #endif
-    KeWaitForSingleObject
-    (
-        &m_MemLock,
-        Executive,
-        KernelMode,
-        FALSE,
-        NULL
-    );
+    BOOLEAN locked = FALSE;
+    locked = WaitForObject(&m_MemLock, NULL);
     mspace_free(m_MSInfo[mspace_type]._mspace, ptr);
-    KeReleaseMutex(&m_MemLock,FALSE);
+    ReleaseMutex(&m_MemLock, locked);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
@@ -4063,20 +4070,14 @@ void QxlDevice::PushDrawable(QXLDrawable *drawable) {
     QXLCommand *cmd;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
-    KeWaitForSingleObject
-    (
-        &m_CmdLock,
-        Executive,
-        KernelMode,
-        FALSE,
-        NULL
-    );
+    BOOLEAN locked = FALSE;
+    locked = WaitForObject(&m_CmdLock, NULL);
     WaitForCmdRing();
     cmd = SPICE_RING_PROD_ITEM(m_CommandRing);
     cmd->type = QXL_CMD_DRAW;
     cmd->data = PA(drawable, m_MainMemSlot);
     PushCmd();
-    KeReleaseMutex(&m_CmdLock,FALSE);
+    ReleaseMutex(&m_CmdLock, locked);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
@@ -4086,20 +4087,14 @@ void QxlDevice::PushCursorCmd(QXLCursorCmd *cursor_cmd)
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
-    KeWaitForSingleObject
-    (
-        &m_CrsLock,
-        Executive,
-        KernelMode,
-        FALSE,
-        NULL
-    );
+    BOOLEAN locked = FALSE;
+    locked = WaitForObject(&m_CrsLock, NULL);
     WaitForCursorRing();
     cmd = SPICE_RING_PROD_ITEM(m_CursorRing);
     cmd->type = QXL_CMD_CURSOR;
     cmd->data = PA(cursor_cmd, m_MainMemSlot);
     PushCursor();
-    KeReleaseMutex(&m_CrsLock,FALSE);
+    ReleaseMutex(&m_CrsLock, locked);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
@@ -4440,7 +4435,7 @@ NTSTATUS QxlDevice::Escape(_In_ CONST DXGKARG_ESCAPE* pEscap)
     if ((xres * yres * bpp / 8) > m_RomHdr->surface0_area_size) {
         DbgPrint(TRACE_LEVEL_FATAL, ("%s: Mode (%dx%d#%d) doesn't fit in memory (%d)\n",
                     __FUNCTION__, xres, yres, bpp, m_RomHdr->surface0_area_size));
-        return ERROR_NOT_ENOUGH_MEMORY;
+        return STATUS_INVALID_PARAMETER;
     }
     UpdateVideoModeInfo(m_CustomMode, xres, yres, bpp);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
@@ -4458,7 +4453,7 @@ VOID QxlDevice::WaitForCmdRing()
         if (!wait) {
             break;
         }
-        WAIT_FOR_EVENT(m_DisplayEvent, NULL);
+        WaitForObject(&m_DisplayEvent, NULL);
     }
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
@@ -4488,7 +4483,7 @@ VOID QxlDevice::WaitForCursorRing(VOID)
 
         LARGE_INTEGER timeout; // 1 => 100 nanoseconds
         timeout.QuadPart = -1 * (1000 * 1000 * 10); //negative  => relative // 1s
-        WAIT_FOR_EVENT(m_CursorEvent, &timeout);
+        WaitForObject(&m_CursorEvent, &timeout);
 
         if (SPICE_RING_IS_FULL(m_CursorRing)) {
             DbgPrint(TRACE_LEVEL_ERROR, ("%s: timeout\n", __FUNCTION__));

@@ -18,13 +18,14 @@ void* __cdecl operator new(size_t Size, POOL_TYPE PoolType)
     
     void* pObject = ExAllocatePoolWithTag(PoolType, Size, QXLTAG);
 
-#if DBG
     if (pObject != NULL)
     {
+#if DBG
         RtlFillMemory(pObject, Size, 0xCD);
-    }
+#else
+        RtlZeroMemory(pObject, Size);
 #endif // DBG
-
+    }
     return pObject;
 }
 
@@ -39,13 +40,14 @@ void* __cdecl operator new[](size_t Size, POOL_TYPE PoolType)
     
     void* pObject = ExAllocatePoolWithTag(PoolType, Size, QXLTAG);
 
-#if DBG
     if (pObject != NULL)
     {
+#if DBG
         RtlFillMemory(pObject, Size, 0xCD);
-    }
+#else
+        RtlZeroMemory(pObject, Size);
 #endif // DBG
-
+    }
     return pObject;
 }
 

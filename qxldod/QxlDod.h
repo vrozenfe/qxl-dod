@@ -356,20 +356,38 @@ struct Resource {
 
 #define TIMEOUT_TO_MS               ((LONGLONG) 1 * 10 * 1000)
 
-#define WAIT_FOR_EVENT(event, timeout) do {             \
-    NTSTATUS status;                                    \
-        status = KeWaitForSingleObject (                \
-                &event,                                 \
-                Executive,                              \
-                KernelMode,                             \
-                FALSE,                                  \
-                timeout);                               \
-        ASSERT(NT_SUCCESS(status));                     \
-} while (0);
+BOOLEAN
+FORCEINLINE
+WaitForObject(
+    PVOID Object,
+    PLARGE_INTEGER Timeout)
+{
+    NTSTATUS status;
+    status = KeWaitForSingleObject (
+            Object,
+            Executive,
+            KernelMode,
+            FALSE,
+            Timeout);
+    ASSERT(NT_SUCCESS(status));
+    return (status == STATUS_SUCCESS);
+}
 
-#define QXL_SLEEP(msec) do {                        \
-    LARGE_INTEGER timeout;                              \
-    timeout.QuadPart = -msec * TIMEOUT_TO_MS;           \
+VOID
+FORCEINLINE
+ReleaseMutex(
+    PKMUTEX Mutex,
+    BOOLEAN locked)
+{
+    if (locked)
+    {
+        KeReleaseMutex(Mutex, FALSE);
+    }
+}
+
+#define QXL_SLEEP(msec) do {                             \
+    LARGE_INTEGER timeout;                               \
+    timeout.QuadPart = -msec * TIMEOUT_TO_MS;            \
     KeDelayExecutionThread (KernelMode, FALSE, &timeout);\
 } while (0);
 
