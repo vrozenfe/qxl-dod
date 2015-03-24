@@ -762,7 +762,7 @@ NTSTATUS QxlDod::AddSingleTargetMode(_In_ CONST DXGK_VIDPNTARGETMODESET_INTERFAC
 
     D3DKMDT_VIDPN_TARGET_MODE* pVidPnTargetModeInfo = NULL;
     NTSTATUS Status  = STATUS_SUCCESS;
-//FIXME !!!!!!
+
     for (UINT ModeIndex = 0; ModeIndex < m_pHWDevice->GetModeCount(); ++ModeIndex)
     {
         PVIDEO_MODE_INFORMATION pModeInfo = m_pHWDevice->GetModeInfo(SourceId);
@@ -894,11 +894,11 @@ NTSTATUS QxlDod::AddSingleMonitorMode(_In_ CONST DXGKARG_RECOMMENDMONITORMODES* 
         pMonitorSourceMode->VideoSignalInfo.HSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
         pMonitorSourceMode->VideoSignalInfo.HSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
         pMonitorSourceMode->VideoSignalInfo.PixelRate = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-        pMonitorSourceMode->VideoSignalInfo.ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE; //???
+        pMonitorSourceMode->VideoSignalInfo.ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
 
-        pMonitorSourceMode->Origin = D3DKMDT_MCO_DRIVER; // ????
-        pMonitorSourceMode->Preference = D3DKMDT_MP_NOTPREFERRED; // TODO...
-        pMonitorSourceMode->ColorBasis = D3DKMDT_CB_SRGB; // ????
+        pMonitorSourceMode->Origin = D3DKMDT_MCO_DRIVER;
+        pMonitorSourceMode->Preference = D3DKMDT_MP_NOTPREFERRED;
+        pMonitorSourceMode->ColorBasis = D3DKMDT_CB_SRGB;
         pMonitorSourceMode->ColorCoeffDynamicRanges.FirstChannel = 8;
         pMonitorSourceMode->ColorCoeffDynamicRanges.SecondChannel = 8;
         pMonitorSourceMode->ColorCoeffDynamicRanges.ThirdChannel = 8;
@@ -939,7 +939,7 @@ NTSTATUS QxlDod::EnumVidPnCofuncModality(_In_ CONST DXGKARG_ENUMVIDPNCOFUNCMODAL
     CONST DXGK_VIDPNSOURCEMODESET_INTERFACE* pVidPnSourceModeSetInterface = NULL;
     CONST DXGK_VIDPNTARGETMODESET_INTERFACE* pVidPnTargetModeSetInterface = NULL;
     CONST D3DKMDT_VIDPN_PRESENT_PATH*        pVidPnPresentPath = NULL;
-    CONST D3DKMDT_VIDPN_PRESENT_PATH*        pVidPnPresentPathTemp = NULL; // Used for AcquireNextPathInfo
+    CONST D3DKMDT_VIDPN_PRESENT_PATH*        pVidPnPresentPathTemp = NULL;
     CONST D3DKMDT_VIDPN_SOURCE_MODE*         pVidPnPinnedSourceModeInfo = NULL;
     CONST D3DKMDT_VIDPN_TARGET_MODE*         pVidPnPinnedTargetModeInfo = NULL;
 
@@ -1285,7 +1285,7 @@ NTSTATUS QxlDod::EnumVidPnCofuncModality(_In_ CONST DXGKARG_ENUMVIDPNCOFUNCMODAL
 NTSTATUS QxlDod::SetVidPnSourceVisibility(_In_ CONST DXGKARG_SETVIDPNSOURCEVISIBILITY* pSetVidPnSourceVisibility)
 {
     PAGED_CODE();
-//    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     QXL_ASSERT(pSetVidPnSourceVisibility != NULL);
     QXL_ASSERT((pSetVidPnSourceVisibility->VidPnSourceId < MAX_VIEWS) ||
                (pSetVidPnSourceVisibility->VidPnSourceId == D3DDDI_ID_ALL));
@@ -1308,7 +1308,7 @@ NTSTATUS QxlDod::SetVidPnSourceVisibility(_In_ CONST DXGKARG_SETVIDPNSOURCEVISIB
         m_CurrentModes[SourceId].Flags.SourceNotVisible = !(pSetVidPnSourceVisibility->Visible);
     }
 
-//    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
 }
 
@@ -1787,7 +1787,7 @@ VOID QxlDod::SystemDisplayWrite(_In_reads_bytes_(SourceHeight * SourceStride) VO
 
     BltBits(&DstBltInfo,
             &SrcBltInfo,
-            1, // NumRects
+            1,
             &Rect);
 
 }
@@ -1844,7 +1844,6 @@ NTSTATUS QxlDod::RegisterHWInfo(ULONG Id)
     NTSTATUS Status;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
-    // TODO: Replace these strings with proper information
     PCSTR StrHWInfoChipType = "QEMU QXL";
     PCSTR StrHWInfoDacType = "QXL 1B36";
     PCSTR StrHWInfoAdapterString = "QXL";
@@ -2314,7 +2313,7 @@ BOOL VgaDevice::SetVideoModeInfo(UINT Idx, PVBE_MODEINFO pModeInfo)
 
     pMode = &m_ModeInfo[Idx];
     pMode->Length = sizeof(VIDEO_MODE_INFORMATION);
-    pMode->ModeIndex = Idx;//m_ModeNumbers[Idx];
+    pMode->ModeIndex = Idx;
     pMode->VisScreenWidth = pModeInfo->XResolution;
     pMode->VisScreenHeight = pModeInfo->YResolution;
     pMode->ScreenStride = pModeInfo->LinBytesPerScanLine;
@@ -2361,7 +2360,7 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
     UINT BitsPerPixel = BPPFromPixelFormat(pDispInfo->ColorFormat);
     NTSTATUS Status = STATUS_SUCCESS;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
-//Get VBE Mode List
+
     Length = 0x400;
     Status = x86BiosAllocateBuffer (&Length, &m_Segment, &m_Offset);
     if (!NT_SUCCESS (Status))
@@ -2537,7 +2536,6 @@ NTSTATUS VgaDevice::QueryCurrentMode(PVIDEO_MODE RequestedMode)
     NTSTATUS Status = STATUS_SUCCESS;
     UNREFERENCED_PARAMETER(RequestedMode);
 
-//    PVBE_MODEINFO VBEMode = &m_ModeInfo[m_CurrentMode];
     return Status;
 }
 
@@ -2674,7 +2672,6 @@ VgaDevice::ExecutePresentDisplayOnly(
 
     RtlZeroMemory(ctx,size);
 
-//    const CURRENT_BDD_MODE* pModeCur = &m_CurrentModes[0];
     ctx->DstAddr          = DstAddr;
     ctx->DstBitPerPixel   = DstBitPerPixel;
     ctx->DstStride        = pModeCur->DispInfo.Pitch;
@@ -2687,8 +2684,6 @@ VgaDevice::ExecutePresentDisplayOnly(
     ctx->Moves            = Moves;
     ctx->NumDirtyRects    = NumDirtyRects;
     ctx->DirtyRect        = DirtyRect;
-//    ctx->SourceID         = m_SourceId;
-//    ctx->hAdapter         = m_DevExt;
     ctx->Mdl              = NULL;
     ctx->DisplaySource    = this;
 
@@ -2755,10 +2750,6 @@ VgaDevice::ExecutePresentDisplayOnly(
         ctx->DirtyRect = reinterpret_cast<RECT*>(rects);
     }
 
-
-//    HwExecutePresentDisplayOnly((PVOID)ctx);
-
-
     // Set up destination blt info
     BLT_INFO DstBltInfo;
     DstBltInfo.pBits = ctx->DstAddr;
@@ -2794,12 +2785,7 @@ VgaDevice::ExecutePresentDisplayOnly(
     // Copy all the scroll rects from source image to video frame buffer.
     for (UINT i = 0; i < ctx->NumMoves; i++)
     {
-//        POINT*   pSourcePoint = &ctx->Moves[i].SourcePoint;
         RECT*    pDestRect = &ctx->Moves[i].DestRect;
-
-//        DbgPrint(TRACE_LEVEL_FATAL, ("--- %d SourcePoint.x = %ld, SourcePoint.y = %ld, DestRect.bottom = %ld, DestRect.left = %ld, DestRect.right = %ld, DestRect.top = %ld\n", 
-//            i , pSourcePoint->x, pSourcePoint->y, pDestRect->bottom, pDestRect->left, pDestRect->right, pDestRect->top));
-
         BltBits(&DstBltInfo,
         &SrcBltInfo,
         1, // NumRects
@@ -2810,9 +2796,6 @@ VgaDevice::ExecutePresentDisplayOnly(
     for (UINT i = 0; i < ctx->NumDirtyRects; i++)
     {
         RECT*    pDirtyRect = &ctx->DirtyRect[i];
-//        DbgPrint(TRACE_LEVEL_FATAL, ("--- %d pDirtyRect->bottom = %ld, pDirtyRect->left = %ld, pDirtyRect->right = %ld, pDirtyRect->top = %ld\n", 
-//            i, pDirtyRect->bottom, pDirtyRect->left, pDirtyRect->right, pDirtyRect->top));
-
         BltBits(&DstBltInfo,
         &SrcBltInfo,
         1, // NumRects
@@ -2944,7 +2927,7 @@ BOOL QxlDevice::SetVideoModeInfo(UINT Idx, QXLMode* pModeInfo)
 
     pMode = &m_ModeInfo[Idx];
     pMode->Length = sizeof(VIDEO_MODE_INFORMATION);
-    pMode->ModeIndex = Idx;//m_ModeNumbers[Idx];
+    pMode->ModeIndex = Idx;
     pMode->VisScreenWidth = pModeInfo->x_res;
     pMode->VisScreenHeight = pModeInfo->y_res;
     pMode->ScreenStride = pModeInfo->stride;
@@ -3146,7 +3129,6 @@ NTSTATUS QxlDevice::SetPowerState(_In_ DEVICE_POWER_STATE DevicePowerState, DXGK
 NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
-//    NTSTATUS Status = STATUS_SUCCESS;
     PDXGKRNL_INTERFACE pDxgkInterface = m_pQxlDod->GetDxgkInterrface();
     UINT pci_range = QXL_RAM_RANGE_INDEX;
     for (ULONG i = 0; i < pResList->Count; ++i)
@@ -3578,7 +3560,6 @@ QxlDevice::ExecutePresentDisplayOnly(
 
     RtlZeroMemory(ctx,size);
 
-//    const CURRENT_BDD_MODE* pModeCur = &m_CurrentModes[0];
     ctx->DstAddr          = DstAddr;
     ctx->DstBitPerPixel   = DstBitPerPixel;
     ctx->DstStride        = pModeCur->DispInfo.Pitch;
@@ -3591,8 +3572,6 @@ QxlDevice::ExecutePresentDisplayOnly(
     ctx->Moves            = Moves;
     ctx->NumDirtyRects    = NumDirtyRects;
     ctx->DirtyRect        = DirtyRect;
-//    ctx->SourceID         = m_SourceId;
-//    ctx->hAdapter         = m_DevExt;
     ctx->Mdl              = NULL;
     ctx->DisplaySource    = this;
 
@@ -3702,7 +3681,7 @@ QxlDevice::ExecutePresentDisplayOnly(
 
         BltBits(&DstBltInfo,
         &SrcBltInfo,
-        1, // NumRects
+        1,
         pDestRect);
     }
 
@@ -3715,7 +3694,7 @@ QxlDevice::ExecutePresentDisplayOnly(
 
         BltBits(&DstBltInfo,
         &SrcBltInfo,
-        1, // NumRects
+        1,
         pDirtyRect);
     }
 
@@ -4141,7 +4120,6 @@ VOID QxlDevice::BltBits (
     }
 
     CONST RECT* pRect = &pRects[0];
-//    UpdateArea(pRect, 0);
     drawable->u.copy.scale_mode = SPICE_IMAGE_SCALE_MODE_NEAREST;
     drawable->u.copy.mask.bitmap = 0;
     drawable->u.copy.rop_descriptor = SPICE_ROPD_OP_PUT;
@@ -4223,7 +4201,6 @@ VOID QxlDevice::PutBytesAlign(QXLDataChunk **chunk_ptr, UINT8 **now_ptr,
     QXLDataChunk *chunk = *chunk_ptr;
     UINT8 *now = *now_ptr;
     UINT8 *end = *end_ptr;
-//    int offset;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
     while (size) {
@@ -4315,7 +4292,6 @@ NTSTATUS  QxlDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPoi
     QXLCursor *cursor;
     Resource *res;
     QXLDataChunk *chunk;
-//    ULONG unique;
     UINT8 *src;
     UINT8 *src_end;
     UINT8 *now;
@@ -4514,9 +4490,9 @@ BOOLEAN QxlDevice::InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_
     m_Pending |= m_RamHdr->int_pending;
     m_RamHdr->int_pending = 0;
 
-    DXGKARGCB_NOTIFY_INTERRUPT_DATA  notifyInt;// = {0};
+    DXGKARGCB_NOTIFY_INTERRUPT_DATA  notifyInt;
     notifyInt.InterruptType = DXGK_INTERRUPT_DISPLAYONLY_PRESENT_PROGRESS;
-    notifyInt.DisplayOnlyPresentProgress.VidPnSourceId = 0;//FIXME pPath->VidPnSourceId;
+    notifyInt.DisplayOnlyPresentProgress.VidPnSourceId = 0;
 
     pDxgkInterface->DxgkCbNotifyInterrupt(pDxgkInterface->DeviceHandle,&notifyInt);
     if (!pDxgkInterface->DxgkCbQueueDpc(pDxgkInterface->DeviceHandle)) {

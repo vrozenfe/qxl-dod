@@ -22,9 +22,6 @@ DriverEntry(
 
     DbgPrint(TRACE_LEVEL_FATAL, ("---> KMDOD build on on %s %s\n", __DATE__, __TIME__));
 
-#ifdef DBG
-//    KdBreakPoint();
-#endif
     // Initialize DDI function pointers and dxgkrnl
     KMDDOD_INITIALIZATION_DATA InitialData = {0};
 

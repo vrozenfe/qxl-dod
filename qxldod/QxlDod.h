@@ -48,7 +48,6 @@ typedef struct
     ULONG OemProductNamePtr;
     ULONG OemProductRevPtr;
     CHAR Reserved[222];
-//    CHAR OemData[256];
 } VBE_INFO, *PVBE_INFO;
 
 typedef struct
