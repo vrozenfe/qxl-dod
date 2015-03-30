@@ -64,11 +64,9 @@ QxlDod::QxlDod(_In_ DEVICE_OBJECT* pPhysicalDeviceObject) : m_pPhysicalDevice(pP
 QxlDod::~QxlDod(void)
 {
     PAGED_CODE();
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     CleanUp();
     delete m_pHWDevice;
     m_pHWDevice = NULL;
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
 NTSTATUS QxlDod::CheckHardware()
@@ -113,8 +111,8 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
                          _Out_ ULONG*             pNumberOfViews,
                          _Out_ ULONG*             pNumberOfChildren)
 {
+    PHYSICAL_ADDRESS PhysicAddress;
     PAGED_CODE();
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
     QXL_ASSERT(pDxgkStartInfo != NULL);
     QXL_ASSERT(pDxgkInterface != NULL);
     QXL_ASSERT(pNumberOfViews != NULL);
@@ -165,6 +163,7 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
         return Status;
     }
 
+    PhysicAddress.QuadPart = m_CurrentModes[0].DispInfo.PhysicAddress.QuadPart;
     if (m_pHWDevice->GetId() == 0)
     {
          Status = m_DxgkInterface.DxgkCbAcquirePostDisplayOwnership(m_DxgkInterface.DeviceHandle, &(m_CurrentModes[0].DispInfo));
@@ -184,6 +183,10 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
         m_CurrentModes[0].DispInfo.Pitch = BPPFromPixelFormat(D3DDDIFMT_R8G8B8) / 8;
         m_CurrentModes[0].DispInfo.ColorFormat = D3DDDIFMT_R8G8B8;
         m_CurrentModes[0].DispInfo.TargetId = 0;
+        if (PhysicAddress.QuadPart != 0L) {
+             m_CurrentModes[0].DispInfo.PhysicAddress.QuadPart = PhysicAddress.QuadPart;
+        }
+
     }
 
    *pNumberOfViews = MAX_VIEWS;
@@ -196,16 +199,13 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
 NTSTATUS QxlDod::StopDevice(VOID)
 {
     PAGED_CODE();
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
     m_Flags.DriverStarted = FALSE;
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
 }
 
 VOID QxlDod::CleanUp(VOID)
 {
     PAGED_CODE();
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     for (UINT Source = 0; Source < MAX_VIEWS; ++Source)
     {
         if (m_CurrentModes[Source].FrameBuffer.Ptr)
@@ -740,7 +740,7 @@ NTSTATUS QxlDod::AddSingleSourceMode(_In_ CONST DXGK_VIDPNSOURCEMODESET_INTERFAC
 
             if (Status != STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET)
             {
-                DbgPrint(TRACE_LEVEL_ERROR, ("pfnAddMode failed with Status = 0x%X, hVidPnSourceModeSet = 0x%I64x, pVidPnSourceModeInfo = 0x%I64x", Status, hVidPnSourceModeSet, pVidPnSourceModeInfo));
+                DbgPrint(TRACE_LEVEL_ERROR, ("pfnAddMode failed with Status = 0x%X, hVidPnSourceModeSet = 0x%I64x, pVidPnSourceModeInfo = %p", Status, hVidPnSourceModeSet, pVidPnSourceModeInfo));
                 return Status;
             }
         }
@@ -771,7 +771,7 @@ NTSTATUS QxlDod::AddSingleTargetMode(_In_ CONST DXGK_VIDPNTARGETMODESET_INTERFAC
         if (!NT_SUCCESS(Status))
         {
             // If failed to create a new mode info, mode doesn't need to be released since it was never created
-            DbgPrint(TRACE_LEVEL_ERROR, ("pfnCreateNewModeInfo failed with Status = 0x%I64x, hVidPnTargetModeSet = 0x%I64x", Status, hVidPnTargetModeSet));
+            DbgPrint(TRACE_LEVEL_ERROR, ("pfnCreateNewModeInfo failed with Status = 0x%X, hVidPnTargetModeSet = 0x%I64x", Status, hVidPnTargetModeSet));
             return Status;
         }
         pVidPnTargetModeInfo->VideoSignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
@@ -792,7 +792,7 @@ NTSTATUS QxlDod::AddSingleTargetMode(_In_ CONST DXGK_VIDPNTARGETMODESET_INTERFAC
         {
             if (Status != STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET)
             {
-                DbgPrint(TRACE_LEVEL_ERROR, ("pfnAddMode failed with Status = 0x%I64x, hVidPnTargetModeSet = 0x%I64x, pVidPnTargetModeInfo = 0x%I64x", Status, hVidPnTargetModeSet, pVidPnTargetModeInfo));
+                DbgPrint(TRACE_LEVEL_ERROR, ("pfnAddMode failed with Status = 0x%X, hVidPnTargetModeSet = 0x%I64x, pVidPnTargetModeInfo = %p", Status, hVidPnTargetModeSet, pVidPnTargetModeInfo));
             }
             
             // If adding the mode failed, release the mode, if this doesn't work there is nothing that can be done, some memory will get leaked
@@ -876,7 +876,7 @@ NTSTATUS QxlDod::AddSingleMonitorMode(_In_ CONST DXGKARG_RECOMMENDMONITORMODES* 
         if (!NT_SUCCESS(Status))
         {
             // If failed to create a new mode info, mode doesn't need to be released since it was never created
-            DbgPrint(TRACE_LEVEL_ERROR, ("pfnCreateNewModeInfo failed with Status = 0x%I64x, hMonitorSourceModeSet = 0x%I64x", Status, pRecommendMonitorModes->hMonitorSourceModeSet));
+            DbgPrint(TRACE_LEVEL_ERROR, ("pfnCreateNewModeInfo failed with Status = 0x%X, hMonitorSourceModeSet = 0x%I64x", Status, pRecommendMonitorModes->hMonitorSourceModeSet));
             return Status;
         }
 
@@ -909,7 +909,7 @@ NTSTATUS QxlDod::AddSingleMonitorMode(_In_ CONST DXGKARG_RECOMMENDMONITORMODES* 
         {
             if (Status != STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET)
             {
-                DbgPrint(TRACE_LEVEL_ERROR, ("pfnAddMode failed with Status = 0x%I64x, hMonitorSourceModeSet = 0x%I64x, pMonitorSourceMode = 0x%I64x",
+                DbgPrint(TRACE_LEVEL_ERROR, ("pfnAddMode failed with Status = 0x%X, hMonitorSourceModeSet = 0x%I64x, pMonitorSourceMode = 0x%p",
                                 Status, pRecommendMonitorModes->hMonitorSourceModeSet, pMonitorSourceMode));
             }
         
@@ -1114,7 +1114,7 @@ NTSTATUS QxlDod::EnumVidPnCofuncModality(_In_ CONST DXGKARG_ENUMVIDPNCOFUNCMODAL
                 Status = pVidPnTargetModeSetInterface->pfnReleaseModeInfo(hVidPnTargetModeSet, pVidPnPinnedTargetModeInfo);
                 if (!NT_SUCCESS(Status))
                 {
-                    DbgPrint(TRACE_LEVEL_ERROR, ("pfnReleaseModeInfo failed with Status = 0x%X, hVidPnTargetModeSet = 0x%I64x, pVidPnPinnedTargetModeInfo = 0x%I64x",
+                    DbgPrint(TRACE_LEVEL_ERROR, ("pfnReleaseModeInfo failed with Status = 0x%X, hVidPnTargetModeSet = 0x%I64x, pVidPnPinnedTargetModeInfo = %p",
                                         Status, hVidPnTargetModeSet, pVidPnPinnedTargetModeInfo));
                     break;
                 }
@@ -1138,7 +1138,7 @@ NTSTATUS QxlDod::EnumVidPnCofuncModality(_In_ CONST DXGKARG_ENUMVIDPNCOFUNCMODAL
             Status = pVidPnSourceModeSetInterface->pfnReleaseModeInfo(hVidPnSourceModeSet, pVidPnPinnedSourceModeInfo);
             if (!NT_SUCCESS(Status))
             {
-                DbgPrint(TRACE_LEVEL_ERROR, ("pfnReleaseModeInfo failed with Status = 0x%X, hVidPnSourceModeSet = 0x%I64x, pVidPnPinnedSourceModeInfo = 0x%I64x",
+                DbgPrint(TRACE_LEVEL_ERROR, ("pfnReleaseModeInfo failed with Status = 0x%X, hVidPnSourceModeSet = 0x%I64x, pVidPnPinnedSourceModeInfo = %p",
                                     Status, hVidPnSourceModeSet, pVidPnPinnedSourceModeInfo));
                 break;
             }
@@ -1212,7 +1212,7 @@ NTSTATUS QxlDod::EnumVidPnCofuncModality(_In_ CONST DXGKARG_ENUMVIDPNCOFUNCMODAL
         Status = pVidPnTopologyInterface->pfnAcquireNextPathInfo(hVidPnTopology, pVidPnPresentPathTemp, &pVidPnPresentPath);
         if (!NT_SUCCESS(Status))
         {
-            DbgPrint(TRACE_LEVEL_ERROR, ("pfnAcquireNextPathInfo failed with Status = 0x%X, hVidPnTopology = 0x%I64x, pVidPnPresentPathTemp = 0x%I64x", Status, hVidPnTopology, pVidPnPresentPathTemp));
+            DbgPrint(TRACE_LEVEL_ERROR, ("pfnAcquireNextPathInfo failed with Status = 0x%X, hVidPnTopology = 0x%I64x, pVidPnPresentPathTemp = %p", Status, hVidPnTopology, pVidPnPresentPathTemp));
             break;
         }
 
@@ -1220,7 +1220,7 @@ NTSTATUS QxlDod::EnumVidPnCofuncModality(_In_ CONST DXGKARG_ENUMVIDPNCOFUNCMODAL
         NTSTATUS TempStatus = pVidPnTopologyInterface->pfnReleasePathInfo(hVidPnTopology, pVidPnPresentPathTemp);
         if (!NT_SUCCESS(TempStatus))
         {
-            DbgPrint(TRACE_LEVEL_ERROR, ("pfnReleasePathInfo failed with Status = 0x%X, hVidPnTopology = 0x%I64x, pVidPnPresentPathTemp = 0x%I64x", TempStatus, hVidPnTopology, pVidPnPresentPathTemp));
+            DbgPrint(TRACE_LEVEL_ERROR, ("pfnReleasePathInfo failed with Status = 0x%X, hVidPnTopology = 0x%I64x, pVidPnPresentPathTemp = %p", TempStatus, hVidPnTopology, pVidPnPresentPathTemp));
             Status = TempStatus;
             break;
         }
@@ -1463,7 +1463,7 @@ NTSTATUS QxlDod::CommitVidPn(_In_ CONST DXGKARG_COMMITVIDPN* CONST pCommitVidPn)
         Status = pVidPnTopologyInterface->pfnReleasePathInfo(hVidPnTopology, pVidPnPresentPath);
         if (!NT_SUCCESS(Status))
         {
-            DbgPrint(TRACE_LEVEL_ERROR, ("pfnReleasePathInfo failed with Status = 0x%X, hVidPnTopoogy = 0x%I64x, pVidPnPresentPath = 0x%I64x",
+            DbgPrint(TRACE_LEVEL_ERROR, ("pfnReleasePathInfo failed with Status = 0x%X, hVidPnTopoogy = 0x%I64x, pVidPnPresentPath = %p",
                             Status, hVidPnTopology, pVidPnPresentPath));
             goto CommitVidPnExit;
         }
@@ -1507,7 +1507,6 @@ NTSTATUS QxlDod::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMo
                                                     CONST D3DKMDT_VIDPN_PRESENT_PATH* pPath)
 {
     PAGED_CODE();
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s SourceId = %d\n", __FUNCTION__, pPath->VidPnSourceId));
 
     NTSTATUS Status = STATUS_SUCCESS;
 
@@ -1543,8 +1542,6 @@ NTSTATUS QxlDod::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMo
         for (USHORT ModeIndex = 0; ModeIndex < m_pHWDevice->GetModeCount(); ++ModeIndex)
         {
              PVIDEO_MODE_INFORMATION pModeInfo = m_pHWDevice->GetModeInfo(ModeIndex);
-             DbgPrint(TRACE_LEVEL_INFORMATION, ("%d\t%d x %d\t%d x %d\n", ModeIndex, pCurrentBddMode->DispInfo.Width, pCurrentBddMode->DispInfo.Height,
-                                pModeInfo->VisScreenWidth, pModeInfo->VisScreenHeight));
              if (pCurrentBddMode->DispInfo.Width == pModeInfo->VisScreenWidth &&
                  pCurrentBddMode->DispInfo.Height == pModeInfo->VisScreenHeight )
              {
@@ -1558,7 +1555,6 @@ NTSTATUS QxlDod::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMo
         }
     }
 
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
     return Status;
 }
 
@@ -1853,7 +1849,7 @@ NTSTATUS QxlDod::RegisterHWInfo(ULONG Id)
     Status = IoOpenDeviceRegistryKey(m_pPhysicalDevice, PLUGPLAY_REGKEY_DRIVER, KEY_SET_VALUE, &DevInstRegKeyHandle);
     if (!NT_SUCCESS(Status))
     {
-        DbgPrint(TRACE_LEVEL_ERROR, ("IoOpenDeviceRegistryKey failed for PDO: 0x%I64x, Status: 0x%I64x", m_pPhysicalDevice, Status));
+        DbgPrint(TRACE_LEVEL_ERROR, ("IoOpenDeviceRegistryKey failed for PDO: 0x%I64x, Status: 0x%X", m_pPhysicalDevice, Status));
         return Status;
     }
 
@@ -1957,7 +1953,7 @@ MapFrameBuffer(
         (Length == 0) ||
         (VirtualAddress == NULL))
     {
-        DbgPrint(TRACE_LEVEL_ERROR, ("One of PhysicalAddress.QuadPart (0x%I64x), Length (0x%I64x), VirtualAddress (0x%I64x) is NULL or 0",
+        DbgPrint(TRACE_LEVEL_ERROR, ("One of PhysicalAddress.QuadPart (0x%I64x), Length (%lu), VirtualAddress (%p) is NULL or 0\n",
                         PhysicalAddress.QuadPart, Length, VirtualAddress));
         return STATUS_INVALID_PARAMETER;
     }
@@ -1975,7 +1971,7 @@ MapFrameBuffer(
                                        MmNonCached);
         if (*VirtualAddress == NULL)
         {
-            DbgPrint(TRACE_LEVEL_ERROR, ("MmMapIoSpace returned a NULL buffer when trying to allocate 0x%I64x bytes", Length));
+            DbgPrint(TRACE_LEVEL_ERROR, ("MmMapIoSpace returned a NULL buffer when trying to allocate %lu bytes", Length));
             return STATUS_NO_MEMORY;
         }
     }
@@ -2001,7 +1997,7 @@ UnmapFrameBuffer(
     }
     else if ((VirtualAddress == NULL) || (Length == 0))
     {
-        DbgPrint(TRACE_LEVEL_ERROR, ("Only one of Length (0x%I64x), VirtualAddress (0x%I64x) is NULL or 0",
+        DbgPrint(TRACE_LEVEL_ERROR, ("Only one of Length (%lu), VirtualAddress (%p) is NULL or 0",
                         Length, VirtualAddress));
         return STATUS_INVALID_PARAMETER;
     }
@@ -2297,6 +2293,7 @@ VgaDevice::VgaDevice(_In_ QxlDod* pQxlDod)
 
 VgaDevice::~VgaDevice(void)
 {
+    HWClose();
     delete [] reinterpret_cast<BYTE*>(m_ModeInfo);
     delete [] reinterpret_cast<BYTE*>(m_ModeNumbers);
     m_ModeInfo = NULL;
@@ -2428,6 +2425,11 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
    }
 
     DbgPrint(TRACE_LEVEL_INFORMATION, ("ModeCount %d\n", ModeCount));
+
+    delete [] reinterpret_cast<BYTE*>(m_ModeInfo);
+    delete [] reinterpret_cast<BYTE*>(m_ModeNumbers);
+    m_ModeInfo = NULL;
+    m_ModeNumbers = NULL;
 
     m_ModeInfo = reinterpret_cast<PVIDEO_MODE_INFORMATION> (new (PagedPool) BYTE[sizeof (VIDEO_MODE_INFORMATION) * ModeCount]);
     if (!m_ModeInfo)
@@ -2911,6 +2913,7 @@ QxlDevice::QxlDevice(_In_ QxlDod* pQxlDod)
 
 QxlDevice::~QxlDevice(void)
 {
+    HWClose();
     delete [] reinterpret_cast<BYTE*>(m_ModeInfo);
     delete [] reinterpret_cast<BYTE*>(m_ModeNumbers);
     m_ModeInfo = NULL;
@@ -2992,7 +2995,10 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
         return STATUS_UNSUCCESSFUL;
     }
 
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("%s: ModeCount = %d\n", __FUNCTION__, ModeCount));
+    delete [] reinterpret_cast<BYTE*>(m_ModeInfo);
+    delete [] reinterpret_cast<BYTE*>(m_ModeNumbers);
+    m_ModeInfo = NULL;
+    m_ModeNumbers = NULL;
 
     ModeCount += 2;
     m_ModeInfo = reinterpret_cast<PVIDEO_MODE_INFORMATION> (new (PagedPool) BYTE[sizeof (VIDEO_MODE_INFORMATION) * ModeCount]);
@@ -3088,7 +3094,7 @@ NTSTATUS QxlDevice::QueryCurrentMode(PVIDEO_MODE RequestedMode)
 
 NTSTATUS QxlDevice::SetCurrentMode(ULONG Mode)
 {
-    DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s Mode = %x\n", __FUNCTION__, Mode));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s Mode = %x\n", __FUNCTION__, Mode));
     for (ULONG idx = 0; idx < GetModeCount(); idx++)
     {
         if (Mode == m_ModeNumbers[idx])
@@ -3144,7 +3150,7 @@ NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
                    PVOID IoBase = NULL;
                    ULONG IoLength = pResDescriptor->u.Port.Length;
                    NTSTATUS Status = STATUS_SUCCESS;
-                   DbgPrint(TRACE_LEVEL_INFORMATION, ("IO Port Info  [%08I64X-%08I64X]\n",
+                   DbgPrint(TRACE_LEVEL_VERBOSE, ("IO Port Info  [%08I64X-%08I64X]\n",
                                  pResDescriptor->u.Port.Start.QuadPart,
                                  pResDescriptor->u.Port.Start.QuadPart +
                                  pResDescriptor->u.Port.Length));
@@ -3166,7 +3172,7 @@ NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
                          }
                          else
                          {
-                               DbgPrint(TRACE_LEVEL_INFORMATION, ("DxgkCbMapMemor failed with status 0x%X\n", Status));
+                               DbgPrint(TRACE_LEVEL_ERROR, ("DxgkCbMapMemor (CmResourceTypePort) failed with status 0x%X\n", Status));
                          }
                    }
                    else
@@ -3174,7 +3180,7 @@ NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
                        m_IoBase = (PUCHAR)(ULONG_PTR)pResDescriptor->u.Port.Start.QuadPart;
                        m_IoSize = pResDescriptor->u.Port.Length;
                    }
-                   DbgPrint(TRACE_LEVEL_INFORMATION, ("io_base  [%X-%X]\n",
+                   DbgPrint(TRACE_LEVEL_VERBOSE, ("io_base  [%X-%X]\n",
                                  m_IoBase,
                                  m_IoBase +
                                  m_IoSize));
@@ -3190,7 +3196,7 @@ NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
                     PVOID MemBase = NULL;
                     ULONG MemLength = pResDescriptor->u.Memory.Length;
                     NTSTATUS Status = STATUS_SUCCESS;
-                    DbgPrint( TRACE_LEVEL_INFORMATION, ("Memory mapped: (%x:%x) Length:(%x)\n",
+                    DbgPrint( TRACE_LEVEL_VERBOSE, ("Memory mapped: (%x:%x) Length:(%x)\n",
                                  pResDescriptor->u.Memory.Start.LowPart,
                                  pResDescriptor->u.Memory.Start.HighPart,
                                  pResDescriptor->u.Memory.Length));
@@ -3230,6 +3236,11 @@ NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
                             break;
                         }
                     }
+                    else
+                    {
+                          DbgPrint(TRACE_LEVEL_INFORMATION, ("DxgkCbMapMemor (CmResourceTypeMemory) failed with status 0x%X\n", Status));
+                    }
+
               }
                    break;
               case CmResourceTypeDma:
@@ -3255,6 +3266,7 @@ NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
         m_RamHdr->magic != QXL_RAM_MAGIC) 
     {
         UnmapMemory();
+        DbgPrint(TRACE_LEVEL_ERROR, ("%s failed asslocateing HW resources\n", __FUNCTION__));
         return STATUS_UNSUCCESSFUL;
     }
 
@@ -3273,6 +3285,7 @@ NTSTATUS QxlDevice::QxlInit(DXGK_DISPLAY_INFORMATION* pDispInfo)
 
     if (!InitMemSlots()) {
         DestroyMemSlots();
+        DbgPrint(TRACE_LEVEL_ERROR, ("%s failed init mem slots\n", __FUNCTION__));
         return STATUS_UNSUCCESSFUL;
     }
 
@@ -4238,8 +4251,6 @@ VOID QxlDevice::BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod)
     QXLDrawable *drawable;
     RECT Rect;
     PAGED_CODE();
-
-    DbgPrint(TRACE_LEVEL_FATAL, ("---> %s\n", __FUNCTION__));
     if (pCurrentBddMod->Flags.FrameBufferIsActive)
     {
         Rect.bottom = pCurrentBddMod->SrcModeHeight;
@@ -4260,15 +4271,12 @@ VOID QxlDevice::BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod)
         drawable->u.fill.mask.bitmap = 0;
         PushDrawable(drawable);
     }
-    DbgPrint(TRACE_LEVEL_FATAL, ("<--- %s\n", __FUNCTION__));
 }
 
 NTSTATUS QxlDevice::HWClose(void)
 {
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     QxlClose();
     UnmapMemory();
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
 }
 
@@ -4386,7 +4394,7 @@ NTSTATUS QxlDevice::Escape(_In_ CONST DXGKARG_ESCAPE* pEscap)
     UINT bpp;
 
     if (pEscap->PrivateDriverDataSize != sizeof(QXLEscapeSetCustomDisplay)) {
-        DbgPrint(TRACE_LEVEL_FATAL, ("<--> %s Incorrect buffer size %d instead of %d\n", __FUNCTION__, pEscap->PrivateDriverDataSize, sizeof(QXLEscapeSetCustomDisplay)));
+        DbgPrint(TRACE_LEVEL_ERROR, ("<--> %s Incorrect buffer size %d instead of %d\n", __FUNCTION__, pEscap->PrivateDriverDataSize, sizeof(QXLEscapeSetCustomDisplay)));
         return STATUS_INVALID_BUFFER_SIZE;
     }
     custom_display = (QXLEscapeSetCustomDisplay*)pEscap->pPrivateDriverData;
@@ -4399,7 +4407,7 @@ NTSTATUS QxlDevice::Escape(_In_ CONST DXGKARG_ESCAPE* pEscap)
     }
     if (xres < MIN_WIDTH_SIZE || yres < MIN_HEIGHT_SIZE)
     {
-        DbgPrint(TRACE_LEVEL_FATAL, ("%s: xres = %d, yres = %d\n", __FUNCTION__, xres, yres));
+        DbgPrint(TRACE_LEVEL_ERROR, ("%s: xres = %d, yres = %d\n", __FUNCTION__, xres, yres));
         return ERROR_INVALID_DATA;
     }
 
@@ -4409,7 +4417,7 @@ NTSTATUS QxlDevice::Escape(_In_ CONST DXGKARG_ESCAPE* pEscap)
         m_CustomMode = (USHORT)(m_ModeCount - 1);
 
     if ((xres * yres * bpp / 8) > m_RomHdr->surface0_area_size) {
-        DbgPrint(TRACE_LEVEL_FATAL, ("%s: Mode (%dx%d#%d) doesn't fit in memory (%d)\n",
+        DbgPrint(TRACE_LEVEL_ERROR, ("%s: Mode (%dx%d#%d) doesn't fit in memory (%d)\n",
                     __FUNCTION__, xres, yres, bpp, m_RomHdr->surface0_area_size));
         return STATUS_INVALID_PARAMETER;
     }

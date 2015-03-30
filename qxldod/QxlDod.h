@@ -214,6 +214,8 @@ class QxlDod;
 
 class HwDeviceIntrface {
 public:
+//    HwDeviceIntrface(_In_ QxlDod* pQxlDod) {;}
+    virtual ~HwDeviceIntrface() {;}
     virtual NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode) = 0;
     virtual NTSTATUS SetCurrentMode(ULONG Mode) = 0;
     virtual NTSTATUS GetCurrentMode(ULONG* Mode) = 0;
@@ -264,7 +266,7 @@ class VgaDevice  :
 {
 public:
     VgaDevice(_In_ QxlDod* pQxlDod);
-    virtual ~VgaDevice(void);
+    ~VgaDevice(void);
     NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode);
     NTSTATUS SetCurrentMode(ULONG Mode);
     NTSTATUS GetCurrentMode(ULONG* Mode);
@@ -437,7 +439,7 @@ class QxlDevice  :
 {
 public:
     QxlDevice(_In_ QxlDod* pQxlDod);
-    virtual ~QxlDevice(void);
+    ~QxlDevice(void);
     NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode);
     NTSTATUS SetCurrentMode(ULONG Mode);
     NTSTATUS GetCurrentMode(ULONG* Mode);
