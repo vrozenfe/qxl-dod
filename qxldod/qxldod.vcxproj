@@ -55,21 +55,25 @@
     <TargetVersion>WindowsV6.3</TargetVersion>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>WindowsKernelModeDriver8.1</PlatformToolset>
+    <ALLOW_DATE_TIME>1</ALLOW_DATE_TIME>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win8 Debug|Win32'" Label="Configuration">
     <TargetVersion>Windows8</TargetVersion>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>WindowsKernelModeDriver8.1</PlatformToolset>
+    <ALLOW_DATE_TIME>1</ALLOW_DATE_TIME>
   </PropertyGroup>
   <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Win8.1 Release|Win32'">
     <TargetVersion>WindowsV6.3</TargetVersion>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>WindowsKernelModeDriver8.1</PlatformToolset>
+    <ALLOW_DATE_TIME>1</ALLOW_DATE_TIME>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win8 Release|Win32'" Label="Configuration">
     <TargetVersion>Windows8</TargetVersion>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>WindowsKernelModeDriver8.1</PlatformToolset>
+    <ALLOW_DATE_TIME>1</ALLOW_DATE_TIME>
   </PropertyGroup>
   <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Win8.1 Debug|x64'">
     <TargetVersion>WindowsV6.3</TargetVersion>
@@ -90,6 +94,7 @@
     <TargetVersion>Windows8</TargetVersion>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>WindowsKernelModeDriver8.1</PlatformToolset>
+    <ALLOW_DATE_TIME>1</ALLOW_DATE_TIME>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -157,6 +162,11 @@
     <PostBuildEvent>
       <Command>Inf2Cat /driver:$(OutDir) /os:8_X86,6_3_X86</Command>
     </PostBuildEvent>
+    <Inf>
+      <EnableVerbose>true</EnableVerbose>
+      <KmdfVersionNumber />
+      <UmdfVersionNumber />
+    </Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8 Debug|Win32'">
     <Link>
@@ -173,6 +183,15 @@
     <PostBuildEvent>
       <Command>Inf2Cat /driver:$(OutDir) /os:8_X86,6_3_X86</Command>
     </PostBuildEvent>
+    <Inf>
+      <KmdfVersionNumber />
+    </Inf>
+    <Inf>
+      <UmdfVersionNumber />
+    </Inf>
+    <Inf>
+      <EnableVerbose>true</EnableVerbose>
+    </Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8.1 Release|Win32'">
     <Link>
@@ -188,6 +207,11 @@
     <PostBuildEvent>
       <Command>Inf2Cat /driver:$(OutDir) /os:8_X86,6_3_X86</Command>
     </PostBuildEvent>
+    <Inf>
+      <EnableVerbose>true</EnableVerbose>
+      <KmdfVersionNumber />
+      <UmdfVersionNumber />
+    </Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8 Release|Win32'">
     <Link>
@@ -203,6 +227,11 @@
     <PostBuildEvent>
       <Command>Inf2Cat /driver:$(OutDir) /os:8_X86,6_3_X86</Command>
     </PostBuildEvent>
+    <Inf>
+      <EnableVerbose>true</EnableVerbose>
+      <KmdfVersionNumber />
+      <UmdfVersionNumber />
+    </Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8.1 Debug|x64'">
     <Link>
@@ -217,6 +246,11 @@
     <PostBuildEvent>
       <Command>Inf2Cat /driver:$(OutDir) /os:8_X64,Server8_X64,Server6_3_X64,6_3_X64</Command>
     </PostBuildEvent>
+    <Inf>
+      <EnableVerbose>true</EnableVerbose>
+      <KmdfVersionNumber />
+      <UmdfVersionNumber />
+    </Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8 Debug|x64'">
     <Link>
@@ -231,6 +265,11 @@
     <PostBuildEvent>
       <Command>Inf2Cat /driver:$(OutDir) /os:8_X64,Server8_X64,Server6_3_X64,6_3_X64</Command>
     </PostBuildEvent>
+    <Inf>
+      <EnableVerbose>true</EnableVerbose>
+      <KmdfVersionNumber />
+      <UmdfVersionNumber />
+    </Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8.1 Release|x64'">
     <Link>
@@ -246,6 +285,11 @@
     <PostBuildEvent>
       <Command>Inf2Cat /driver:$(OutDir) /os:8_X64,Server8_X64,Server6_3_X64,6_3_X64</Command>
     </PostBuildEvent>
+    <Inf>
+      <EnableVerbose>true</EnableVerbose>
+      <KmdfVersionNumber />
+      <UmdfVersionNumber />
+    </Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win8 Release|x64'">
     <Link>
@@ -261,10 +305,12 @@
     <PostBuildEvent>
       <Command>Inf2Cat /driver:$(OutDir) /os:8_X64,Server8_X64,Server6_3_X64,6_3_X64</Command>
     </PostBuildEvent>
+    <Inf>
+      <EnableVerbose>true</EnableVerbose>
+      <KmdfVersionNumber />
+      <UmdfVersionNumber />
+    </Inf>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <Inf Include="qxldod.inf" />
-  </ItemGroup>
   <ItemGroup>
     <FilesToPackage Include="$(TargetPath)" />
     <FilesToPackage Include="@(Inf->'%(CopyOutput)')" Condition="'@(Inf)'!=''" />
@@ -283,6 +329,9 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="qxldod.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Inf Include="qxldod.inx" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

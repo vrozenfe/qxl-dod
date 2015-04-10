@@ -207,8 +207,6 @@ DodSystemDisplayWrite(
     _In_  UINT  PositionX,
     _In_  UINT  PositionY);
 
-
-
 #if DBG
 
 extern int nDebugLevel;

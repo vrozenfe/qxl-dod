@@ -48,7 +48,6 @@ typedef struct
     ULONG OemProductNamePtr;
     ULONG OemProductRevPtr;
     CHAR Reserved[222];
-//    CHAR OemData[256];
 } VBE_INFO, *PVBE_INFO;
 
 typedef struct
@@ -215,6 +214,7 @@ class QxlDod;
 
 class HwDeviceIntrface {
 public:
+    virtual ~HwDeviceIntrface() {;}
     virtual NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode) = 0;
     virtual NTSTATUS SetCurrentMode(ULONG Mode) = 0;
     virtual NTSTATUS GetCurrentMode(ULONG* Mode) = 0;
@@ -265,7 +265,7 @@ class VgaDevice  :
 {
 public:
     VgaDevice(_In_ QxlDod* pQxlDod);
-    virtual ~VgaDevice(void);
+    ~VgaDevice(void);
     NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode);
     NTSTATUS SetCurrentMode(ULONG Mode);
     NTSTATUS GetCurrentMode(ULONG* Mode);
@@ -356,20 +356,38 @@ struct Resource {
 
 #define TIMEOUT_TO_MS               ((LONGLONG) 1 * 10 * 1000)
 
-#define WAIT_FOR_EVENT(event, timeout) do {             \
-    NTSTATUS status;                                    \
-        status = KeWaitForSingleObject (                \
-                &event,                                 \
-                Executive,                              \
-                KernelMode,                             \
-                FALSE,                                  \
-                timeout);                               \
-        ASSERT(NT_SUCCESS(status));                     \
-} while (0);
+BOOLEAN
+FORCEINLINE
+WaitForObject(
+    PVOID Object,
+    PLARGE_INTEGER Timeout)
+{
+    NTSTATUS status;
+    status = KeWaitForSingleObject (
+            Object,
+            Executive,
+            KernelMode,
+            FALSE,
+            Timeout);
+    ASSERT(NT_SUCCESS(status));
+    return (status == STATUS_SUCCESS);
+}
 
-#define QXL_SLEEP(msec) do {                        \
-    LARGE_INTEGER timeout;                              \
-    timeout.QuadPart = -msec * TIMEOUT_TO_MS;           \
+VOID
+FORCEINLINE
+ReleaseMutex(
+    PKMUTEX Mutex,
+    BOOLEAN locked)
+{
+    if (locked)
+    {
+        KeReleaseMutex(Mutex, FALSE);
+    }
+}
+
+#define QXL_SLEEP(msec) do {                             \
+    LARGE_INTEGER timeout;                               \
+    timeout.QuadPart = -msec * TIMEOUT_TO_MS;            \
     KeDelayExecutionThread (KernelMode, FALSE, &timeout);\
 } while (0);
 
@@ -420,15 +438,15 @@ class QxlDevice  :
 {
 public:
     QxlDevice(_In_ QxlDod* pQxlDod);
-    virtual ~QxlDevice(void);
+    ~QxlDevice(void);
     NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode);
     NTSTATUS SetCurrentMode(ULONG Mode);
     NTSTATUS GetCurrentMode(ULONG* Mode);
-    ULONG GetModeCount(void) {return m_ModeCount/* - 2*/;}
+    ULONG GetModeCount(void) {return m_ModeCount;}
     NTSTATUS SetPowerState(DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWClose(void);
-    BOOLEAN EnablePointer(void) { return TRUE; }
+    BOOLEAN EnablePointer(void) { return FALSE; }
     NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
                     _In_ UINT              DstBitPerPixel,
                     _In_ BYTE*             SrcAddr,

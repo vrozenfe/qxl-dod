@@ -9,7 +9,7 @@
 // Driver Entry point
 //
 
-int nDebugLevel = TRACE_LEVEL_INFORMATION;
+int nDebugLevel = TRACE_LEVEL_ERROR;
 
 
 extern "C"
@@ -22,9 +22,6 @@ DriverEntry(
 
     DbgPrint(TRACE_LEVEL_FATAL, ("---> KMDOD build on on %s %s\n", __DATE__, __TIME__));
 
-#ifdef DBG
-//    KdBreakPoint();
-#endif
     // Initialize DDI function pointers and dxgkrnl
     KMDDOD_INITIALIZATION_DATA InitialData = {0};
 
@@ -252,7 +249,7 @@ DodQueryDeviceDescriptor(
         // The first call queues a worker thread item indicating that it now has a child device, the second queues a worker thread
         // item that it no longer has any child device. This function gets called based on the first worker thread item, but after
         // the driver has been stopped. Therefore instead of asserting like other functions, we only warn.
-        DbgPrint(TRACE_LEVEL_WARNING, ("QXL (0x%I64x) is being called when not active!", pQxl));
+        DbgPrint(TRACE_LEVEL_WARNING, ("QXL (%p) is being called when not active!", pQxl));
         return STATUS_UNSUCCESSFUL;
     }
     return pQxl->QueryDeviceDescriptor(ChildUid, pDeviceDescriptor);
@@ -290,7 +287,7 @@ DodSetPointerPosition(
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
     {
-        QXL_LOG_ASSERTION1("QXL (0x%I64x) is being called when not active!", pQxl);
+        QXL_LOG_ASSERTION1("QXL (%p) is being called when not active!", pQxl);
         return STATUS_UNSUCCESSFUL;
     }
     return pQxl->SetPointerPosition(pSetPointerPosition);
@@ -309,7 +306,7 @@ DodSetPointerShape(
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
     {
-        QXL_LOG_ASSERTION1("QXL (0x%I64x) is being called when not active!", pQxl);
+        QXL_LOG_ASSERTION1("QXL (%p) is being called when not active!", pQxl);
         return STATUS_UNSUCCESSFUL;
     }
     return pQxl->SetPointerShape(pSetPointerShape);
@@ -357,7 +354,7 @@ DodPresentDisplayOnly(
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
     {
-        QXL_LOG_ASSERTION1("QXL (0x%I64x) is being called when not active!", pQxl);
+        QXL_LOG_ASSERTION1("QXL (%p) is being called when not active!", pQxl);
         return STATUS_UNSUCCESSFUL;
     }
     return pQxl->PresentDisplayOnly(pPresentDisplayOnly);
@@ -394,7 +391,7 @@ DodIsSupportedVidPn(
         // This path might hit because win32k/dxgport doesn't check that an adapter is active when taking the adapter lock.
         // The adapter lock is the main thing QXL Fallback relies on to not be called while it's inactive. It is still a rare
         // timing issue around PnpStart/Stop and isn't expected to have any effect on the stability of the system.
-        DbgPrint(TRACE_LEVEL_WARNING, ("QXL (0x%I64x) is being called when not active!", pQxl));
+        DbgPrint(TRACE_LEVEL_WARNING, ("QXL (%p) is being called when not active!", pQxl));
         return STATUS_UNSUCCESSFUL;
     }
     return pQxl->IsSupportedVidPn(pIsSupportedVidPn);
@@ -413,7 +410,7 @@ DodRecommendFunctionalVidPn(
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
     {
-        QXL_LOG_ASSERTION1("QXL (0x%I64x) is being called when not active!", pQxl);
+        QXL_LOG_ASSERTION1("QXL (%p) is being called when not active!", pQxl);
         return STATUS_UNSUCCESSFUL;
     }
     return pQxl->RecommendFunctionalVidPn(pRecommendFunctionalVidPn);
@@ -432,7 +429,7 @@ DodRecommendVidPnTopology(
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
     {
-        QXL_LOG_ASSERTION1("QXL (0x%I64x) is being called when not active!", pQxl);
+        QXL_LOG_ASSERTION1("QXL (%p) is being called when not active!", pQxl);
         return STATUS_UNSUCCESSFUL;
     }
     return pQxl->RecommendVidPnTopology(pRecommendVidPnTopology);
@@ -451,7 +448,7 @@ DodRecommendMonitorModes(
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
     {
-        QXL_LOG_ASSERTION1("QXL (0x%I64x) is being called when not active!", pQxl);
+        QXL_LOG_ASSERTION1("QXL (%p) is being called when not active!", pQxl);
         return STATUS_UNSUCCESSFUL;
     }
     return pQxl->RecommendMonitorModes(pRecommendMonitorModes);
@@ -470,7 +467,7 @@ DodEnumVidPnCofuncModality(
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
     {
-        QXL_LOG_ASSERTION1("QXL (0x%I64x) is being called when not active!", pQxl);
+        QXL_LOG_ASSERTION1("QXL (%p) is being called when not active!", pQxl);
         return STATUS_UNSUCCESSFUL;
     }
     return pQxl->EnumVidPnCofuncModality(pEnumCofuncModality);
@@ -489,7 +486,7 @@ DodSetVidPnSourceVisibility(
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
     {
-        QXL_LOG_ASSERTION1("QXL (0x%I64x) is being called when not active!", pQxl);
+        QXL_LOG_ASSERTION1("QXL (%p) is being called when not active!", pQxl);
         return STATUS_UNSUCCESSFUL;
     }
     return pQxl->SetVidPnSourceVisibility(pSetVidPnSourceVisibility);
@@ -508,7 +505,7 @@ DodCommitVidPn(
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
     {
-        QXL_LOG_ASSERTION1("QXL (0x%I64x) is being called when not active!", pQxl);
+        QXL_LOG_ASSERTION1("QXL (%p) is being called when not active!", pQxl);
         return STATUS_UNSUCCESSFUL;
     }
     return pQxl->CommitVidPn(pCommitVidPn);
@@ -527,7 +524,7 @@ DodUpdateActiveVidPnPresentPath(
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
     {
-        QXL_LOG_ASSERTION1("QXL (0x%I64x) is being called when not active!", pQxl);
+        QXL_LOG_ASSERTION1("QXL (%p) is being called when not active!", pQxl);
         return STATUS_UNSUCCESSFUL;
     }
     return pQxl->UpdateActiveVidPnPresentPath(pUpdateActiveVidPnPresentPath);
@@ -546,7 +543,7 @@ DodQueryVidPnHWCapability(
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
     if (!pQxl->IsDriverActive())
     {
-        QXL_LOG_ASSERTION1("QXL (0x%I64x) is being called when not active!", pQxl);
+        QXL_LOG_ASSERTION1("QXL (%p) is being called when not active!", pQxl);
         return STATUS_UNSUCCESSFUL;
     }
     return pQxl->QueryVidPnHWCapability(pVidPnHWCaps);
@@ -569,7 +566,7 @@ DodDpcRoutine(
     QxlDod* pQxl = reinterpret_cast<QxlDod*>(pDeviceContext);
     if (!pQxl->IsDriverActive())
     {
-        QXL_LOG_ASSERTION1("QXL (0x%I64x) is being called when not active!", pQxl);
+        QXL_LOG_ASSERTION1("QXL (%p) is being called when not active!", pQxl);
         return;
     }
     pQxl->DpcRoutine();
