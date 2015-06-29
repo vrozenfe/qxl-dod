@@ -4375,7 +4375,6 @@ NTSTATUS  QxlDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPoi
     cursor->header.width = (UINT16)pSetPointerShape->Width;
     cursor->header.height = (UINT16)pSetPointerShape->Height;
     if (cursor->header.type == SPICE_CURSOR_TYPE_MONO) {
-        cursor->header.height >>= 1;
         line_size = ALIGN(cursor->header.width, 8) >> 3;
     } else {
         line_size = cursor->header.width << 2;
@@ -4396,7 +4395,7 @@ NTSTATUS  QxlDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPoi
     now = chunk->data;
     end = (UINT8 *)res + CURSOR_ALLOC_SIZE;
 
-    src_end = src + (pSetPointerShape->Pitch * pSetPointerShape->Height);
+    src_end = src + (pSetPointerShape->Pitch * pSetPointerShape->Height * (pSetPointerShape->Flags.Monochrome ? 2 : 1));
     for (; src != src_end; src += pSetPointerShape->Pitch) {
         PutBytesAlign(&chunk, &now, &end, src, line_size,
                  PAGE_SIZE, 1);
