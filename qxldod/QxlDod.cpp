@@ -2770,7 +2770,7 @@ VgaDevice::ExecutePresentDisplayOnly(
         // Note: double mapping the buffer this way causes lot of system
         // overhead for large size buffers.
         ctx->SrcAddr = reinterpret_cast<BYTE*>
-            (MmGetSystemAddressForMdlSafe(mdl, NormalPagePriority ));
+            (MmGetSystemAddressForMdlSafe(mdl, NormalPagePriority | MdlMappingNoExecute));
 
         if(!ctx->SrcAddr) {
             Status = STATUS_INSUFFICIENT_RESOURCES;
@@ -3669,7 +3669,7 @@ QxlDevice::ExecutePresentDisplayOnly(
         // Note: double mapping the buffer this way causes lot of system
         // overhead for large size buffers.
         ctx->SrcAddr = reinterpret_cast<BYTE*>
-            (MmGetSystemAddressForMdlSafe(mdl, NormalPagePriority ));
+            (MmGetSystemAddressForMdlSafe(mdl, NormalPagePriority | MdlMappingNoExecute));
 
         if(!ctx->SrcAddr) {
             Status = STATUS_INSUFFICIENT_RESOURCES;
