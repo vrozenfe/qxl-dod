@@ -3641,7 +3641,7 @@ QxlDevice::ExecutePresentDisplayOnly(
 
     {
         // Map Source into kernel space, as Blt will be executed by system worker thread
-        UINT sizeToMap = SrcBytesPerPixel * ctx->SrcWidth * ctx->SrcHeight;
+        UINT sizeToMap = ctx->SrcPitch * ctx->SrcHeight;
 
         PMDL mdl = IoAllocateMdl((PVOID)SrcAddr, sizeToMap,  FALSE, FALSE, NULL);
         if(!mdl)
