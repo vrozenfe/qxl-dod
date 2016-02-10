@@ -4792,7 +4792,7 @@ NTSTATUS HwDeviceInterface::AcquireDisplayInfo(DXGK_DISPLAY_INFORMATION& DispInf
     {
         DispInfo.Width = MIN_WIDTH_SIZE;
         DispInfo.Height = MIN_HEIGHT_SIZE;
-        DispInfo.Pitch = BPPFromPixelFormat(D3DDDIFMT_R8G8B8) / 8;
+        DispInfo.Pitch = MIN_WIDTH_SIZE * BPPFromPixelFormat(D3DDDIFMT_R8G8B8) / 8;
         DispInfo.ColorFormat = D3DDDIFMT_R8G8B8;
         DispInfo.TargetId = 0;
         if (PhysicAddress.QuadPart != 0L)
