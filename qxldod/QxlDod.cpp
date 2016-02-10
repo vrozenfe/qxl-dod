@@ -434,11 +434,6 @@ NTSTATUS QxlDod::SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetP
     QXL_ASSERT(pSetPointerPosition != NULL);
     QXL_ASSERT(pSetPointerPosition->VidPnSourceId < MAX_VIEWS);
 
-    if (!(pSetPointerPosition->Flags.Visible))
-    {
-        DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s Cursor is not visible\n", __FUNCTION__));
-        return STATUS_SUCCESS;
-    }
     return m_pHWDevice->SetPointerPosition(pSetPointerPosition);
 }
 
@@ -4507,7 +4502,7 @@ NTSTATUS QxlDevice::SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pS
                                  pSetPointerPosition->X,
                                  pSetPointerPosition->Y));
     QXLCursorCmd *cursor_cmd = CursorCmd();
-    if (pSetPointerPosition->X < 0) {
+    if (pSetPointerPosition->X < 0 || !pSetPointerPosition->Flags.Visible) {
         cursor_cmd->type = QXL_CURSOR_HIDE;
     } else {
         cursor_cmd->type = QXL_CURSOR_MOVE;
