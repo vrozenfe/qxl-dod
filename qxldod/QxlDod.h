@@ -619,8 +619,6 @@ private:
     DXGKARG_SETPOINTERSHAPE m_PointerShape;
 
     HwDeviceInterface* m_pHWDevice;
-    DWORD m_VgaCompatible;
-    DWORD m_PointerCaps;
 public:
     QxlDod(_In_ DEVICE_OBJECT* pPhysicalDeviceObject);
     ~QxlDod(void);
@@ -743,7 +741,6 @@ private:
     NTSTATUS IsVidPnSourceModeFieldsValid(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMode) const;
     NTSTATUS IsVidPnPathFieldsValid(CONST D3DKMDT_VIDPN_PRESENT_PATH* pPath) const;
     NTSTATUS RegisterHWInfo(_In_ ULONG Id);
-    NTSTATUS ReadConfiguration();
 };
 
 NTSTATUS

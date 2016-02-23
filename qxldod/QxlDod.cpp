@@ -1874,57 +1874,6 @@ NTSTATUS QxlDod::RegisterHWInfo(_In_ ULONG Id)
     return Status;
 }
 
-NTSTATUS QxlDod::ReadConfiguration()
-{
-    PAGED_CODE();
-
-    NTSTATUS Status;
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
-
-    HANDLE DevInstRegKeyHandle;
-    Status = IoOpenDeviceRegistryKey(m_pPhysicalDevice, PLUGPLAY_REGKEY_DRIVER, KEY_SET_VALUE, &DevInstRegKeyHandle);
-    if (!NT_SUCCESS(Status))
-    {
-        DbgPrint(TRACE_LEVEL_ERROR, ("IoOpenDeviceRegistryKey failed for PDO: 0x%I64x, Status: 0x%I64x", m_pPhysicalDevice, Status));
-        return Status;
-    }
-    UNICODE_STRING ValueName;
-    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION)+sizeof(ULONG)];
-    PKEY_VALUE_PARTIAL_INFORMATION Value = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
-    ULONG ValueLength = sizeof(Buffer);
-    ULONG ResultLength;
-    ULONG Length;
-
-    RtlInitUnicodeString(&ValueName, L"VgaCompatible");
-
-    Status = ZwQueryValueKey(DevInstRegKeyHandle,
-        &ValueName,
-        KeyValuePartialInformation,
-        Value,
-        ValueLength,
-        &ResultLength);
-
-    if (NT_SUCCESS(Status)) {
-        m_VgaCompatible = *(PULONG)(Value->Data);
-    }
-
-    RtlInitUnicodeString(&ValueName, L"PointerCaps");
-
-    Status = ZwQueryValueKey(DevInstRegKeyHandle,
-        &ValueName,
-        KeyValuePartialInformation,
-        Value,
-        ValueLength,
-        &ResultLength);
-
-    if (NT_SUCCESS(Status)) {
-        m_PointerCaps = *(PULONG)(Value->Data);
-    }
-
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
-    return Status;
-}
-
 QXL_NON_PAGED
 D3DDDI_VIDEO_PRESENT_SOURCE_ID QxlDod::FindSourceForTarget(D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId, BOOLEAN DefaultToZero)
 {
