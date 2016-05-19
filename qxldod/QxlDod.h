@@ -106,7 +106,7 @@ typedef struct
 
 #pragma pack(pop)
 
-typedef struct _X86BIOS_REGISTERS	// invented names
+typedef struct _X86BIOS_REGISTERS    // invented names
 {
     ULONG Eax;
     ULONG Ecx;

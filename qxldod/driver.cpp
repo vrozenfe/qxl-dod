@@ -634,7 +634,7 @@ DodSystemDisplayWrite(
 #if defined(DBG)
 
 #define RHEL_DEBUG_PORT     ((PUCHAR)0x3F8)
-#define TEMP_BUFFER_SIZE	256
+#define TEMP_BUFFER_SIZE    256
 
 void DebugPrintFuncSerial(const char *format, ...)
 {
