@@ -470,7 +470,8 @@ protected:
     VOID BltBits (BLT_INFO* pDst,
                     CONST BLT_INFO* pSrc,
                     UINT  NumRects,
-                    _In_reads_(NumRects) CONST RECT *pRects);
+                    _In_reads_(NumRects) CONST RECT *pRects,
+                    POINT*   pSourcePoint);
     QXLDrawable *Drawable(UINT8 type,
                     CONST RECT *area,
                     CONST RECT *clip,

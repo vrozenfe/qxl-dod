@@ -3752,20 +3752,26 @@ QxlDevice::ExecutePresentDisplayOnly(
         BltBits(&DstBltInfo,
         &SrcBltInfo,
         1,
-        pDestRect);
+        pDestRect,
+        pSourcePoint);
     }
 
     // Copy all the dirty rects from source image to video frame buffer.
     for (UINT i = 0; i < ctx->NumDirtyRects; i++)
     {
         RECT*    pDirtyRect = &ctx->DirtyRect[i];
-        DbgPrint(TRACE_LEVEL_INFORMATION, ("--- %d pDirtyRect->bottom = %ld, pDirtyRect->left = %ld, pDirtyRect->right = %ld, pDirtyRect->top = %ld\n", 
+        POINT   sourcePoint;
+        sourcePoint.x = pDirtyRect->left;
+        sourcePoint.y = pDirtyRect->top;
+
+        DbgPrint(TRACE_LEVEL_INFORMATION, ("--- %d pDirtyRect->bottom = %ld, pDirtyRect->left = %ld, pDirtyRect->right = %ld, pDirtyRect->top = %ld\n",
             i, pDirtyRect->bottom, pDirtyRect->left, pDirtyRect->right, pDirtyRect->top));
 
         BltBits(&DstBltInfo,
         &SrcBltInfo,
         1,
-        pDirtyRect);
+        pDirtyRect,
+        &sourcePoint);
     }
 
     // Unmap unmap and unlock the pages.
@@ -4170,7 +4176,8 @@ VOID QxlDevice::BltBits (
     BLT_INFO* pDst,
     CONST BLT_INFO* pSrc,
     UINT  NumRects,
-    _In_reads_(NumRects) CONST RECT *pRects)
+    _In_reads_(NumRects) CONST RECT *pRects,
+    POINT*   pSourcePoint)
 {
     QXLDrawable *drawable;
     Resource *image_res;
@@ -4233,8 +4240,8 @@ VOID QxlDevice::BltBits (
     internal->image.bitmap.stride = line_size;
 
     UINT8* src = (UINT8*)pSrc->pBits+
-                                (pRect->top) * pSrc->Pitch +
-                                (pRect->left * 4);
+                                (pSourcePoint->y) * pSrc->Pitch +
+                                (pSourcePoint->x * 4);
     UINT8* src_end = src - pSrc->Pitch;
     src += pSrc->Pitch * (height - 1);
     UINT8* dest = chunk->data;
