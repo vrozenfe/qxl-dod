@@ -3430,7 +3430,7 @@ void QxlDevice::CreatePrimarySurface(PVIDEO_MODE_INFORMATION pModeInfo)
 
     primary_surface_create->mem = PA( m_RamStart, m_MainMemSlot);
 
-    primary_surface_create->flags = QXL_SURF_FLAG_KEEP_DATA;
+    primary_surface_create->flags = 0;
     primary_surface_create->type = QXL_SURF_TYPE_PRIMARY;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s format = %d, width = %d, height = %d, stride = %d\n", __FUNCTION__, pModeInfo->BitsPerPlane, pModeInfo->VisScreenWidth, pModeInfo->VisScreenHeight,
                                      pModeInfo->ScreenStride));
