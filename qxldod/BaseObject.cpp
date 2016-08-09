@@ -70,3 +70,14 @@ void __cdecl operator delete[](void* pObject)
         ExFreePool(pObject);
     }
 }
+
+void __cdecl operator delete(void *pObject, size_t s)
+{
+    PAGED_CODE();
+
+    UNREFERENCED_PARAMETER(s);
+
+    if (pObject != NULL) {
+        ExFreePool(pObject);
+    }
+}
