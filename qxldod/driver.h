@@ -211,14 +211,18 @@ DodSystemDisplayWrite(
 
 extern int nDebugLevel;
 void DebugPrintFuncSerial(const char *format, ...);
-
 void DebugPrintFunc(const char *format, ...);
+void DebugPrint(int level, const char *fmt, ...);
 
-#define DbgPrint(level, line) \
-    if (level > nDebugLevel) {} \
-    else DebugPrintFuncSerial line
+#define DbgExpandArguments(...) __VA_ARGS__
+
+#define DbgPrint(level, line) do { \
+    if (level <= nDebugLevel) DebugPrintFuncSerial line; \
+    DebugPrint(level, DbgExpandArguments line); \
+} while(0)
+
 #else
-#define DbgPrint(level, line) 
+#define DbgPrint(level, line)
 #endif
 
 //    else if (0) DebugPrintFuncSerial line \

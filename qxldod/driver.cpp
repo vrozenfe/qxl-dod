@@ -667,7 +667,19 @@ void DebugPrintFunc(const char *format, ...)
     va_start(list, format);
     vDbgPrintEx(DPFLTR_DEFAULT_ID, 9 | DPFLTR_MASK, format, list);
 }
+
+void DebugPrint(int level, const char *fmt, ...)
+{
+    static const ULONG xlate[] = { 0, 0, 1, 2, 3 };
+    if (level <= 0 || level > 5)
+        return;
+
+    va_list list;
+    va_start(list, fmt);
+    vDbgPrintEx(DPFLTR_IHVVIDEO_ID, xlate[level - 1], fmt, list);
+    va_end(list);
+}
+
 #endif
 
 #pragma code_seg(pop) // End Non-Paged Code
-
