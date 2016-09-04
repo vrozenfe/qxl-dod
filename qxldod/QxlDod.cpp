@@ -290,12 +290,16 @@ NTSTATUS QxlDod::SetPowerState(_In_  ULONG HardwareUid,
                                _In_  DEVICE_POWER_STATE DevicePowerState,
                                _In_  POWER_ACTION       ActionType)
 {
+    NTSTATUS Status(STATUS_SUCCESS);
     PAGED_CODE();
     DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s HardwareUid = 0x%x ActionType = %s DevicePowerState = %s AdapterPowerState = %s\n", __FUNCTION__, HardwareUid, DbgPowerActionString(ActionType), DbgDevicePowerString(DevicePowerState), DbgDevicePowerString(m_AdapterPowerState)));
 
     if (HardwareUid == DISPLAY_ADAPTER_HW_ID)
     {
-        if (DevicePowerState == PowerDeviceD0)
+        // There is nothing to do to specifically power up/down the display adapter
+        Status = m_pHWDevice->SetPowerState(DevicePowerState, &(m_CurrentModes[0].DispInfo));
+
+        if (NT_SUCCESS(Status) && DevicePowerState == PowerDeviceD0)
         {
 
             // When returning from D3 the device visibility defined to be off for all targets
@@ -306,17 +310,13 @@ NTSTATUS QxlDod::SetPowerState(_In_  ULONG HardwareUid,
                 Visibility.Visible = FALSE;
                 SetVidPnSourceVisibility(&Visibility);
             }
+            // Store new adapter power state
+            m_AdapterPowerState = DevicePowerState;
         }
-
-        // Store new adapter power state
-        m_AdapterPowerState = DevicePowerState;
-
-        // There is nothing to do to specifically power up/down the display adapter
-        return m_pHWDevice->SetPowerState(DevicePowerState, &(m_CurrentModes[0].DispInfo));
     }
     // TODO: This is where the specified monitor should be powered up/down
     
-    return STATUS_SUCCESS;
+    return Status;
 }
 
 NTSTATUS QxlDod::QueryChildRelations(_Out_writes_bytes_(ChildRelationsSize) DXGK_CHILD_DESCRIPTOR* pChildRelations,
