@@ -4550,12 +4550,6 @@ BOOLEAN QxlDevice::InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_
     WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_UPDATE_IRQ), 0);
     m_Pending |= m_RamHdr->int_pending;
     m_RamHdr->int_pending = 0;
-
-    DXGKARGCB_NOTIFY_INTERRUPT_DATA  notifyInt;
-    notifyInt.InterruptType = DXGK_INTERRUPT_DISPLAYONLY_PRESENT_PROGRESS;
-    notifyInt.DisplayOnlyPresentProgress.VidPnSourceId = 0;
-
-    pDxgkInterface->DxgkCbNotifyInterrupt(pDxgkInterface->DeviceHandle,&notifyInt);
     if (!pDxgkInterface->DxgkCbQueueDpc(pDxgkInterface->DeviceHandle)) {
         m_RamHdr->int_mask = WIN_QXL_INT_MASK;
         WRITE_PORT_UCHAR((PUCHAR)(m_IoBase + QXL_IO_UPDATE_IRQ), 0);
