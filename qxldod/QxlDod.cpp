@@ -4359,6 +4359,7 @@ NTSTATUS  QxlDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPoi
     UINT8 *now;
     UINT8 *end;
     int line_size;
+    int num_images = 1;
 
     cursor_cmd = CursorCmd();
     cursor_cmd->type = QXL_CURSOR_SET;
@@ -4382,14 +4383,16 @@ NTSTATUS  QxlDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPoi
     cursor->header.height = (UINT16)pSetPointerShape->Height;
     if (cursor->header.type == SPICE_CURSOR_TYPE_MONO) {
         line_size = ALIGN(cursor->header.width, 8) >> 3;
+        cursor->data_size = line_size * pSetPointerShape->Height * 2;
+        num_images = 2;
     } else {
         line_size = cursor->header.width << 2;
+        cursor->data_size = line_size * pSetPointerShape->Height;
     }
 
     cursor->header.hot_spot_x = (UINT16)pSetPointerShape->XHot;
     cursor->header.hot_spot_y = (UINT16)pSetPointerShape->YHot;
 
-    cursor->data_size = line_size * pSetPointerShape->Height;
     DbgPrint(TRACE_LEVEL_INFORMATION, ("<--> %s %d::%d::%d::%d::%d\n", __FUNCTION__, cursor->header.width, cursor->header.height, cursor->header.hot_spot_x, cursor->header.hot_spot_y, cursor->data_size));
 
     chunk = &cursor->chunk;
@@ -4400,8 +4403,7 @@ NTSTATUS  QxlDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPoi
     src = (UINT8*)pSetPointerShape->pPixels;
     now = chunk->data;
     end = (UINT8 *)res + CURSOR_ALLOC_SIZE;
-
-    src_end = src + (pSetPointerShape->Pitch * pSetPointerShape->Height * (pSetPointerShape->Flags.Monochrome ? 2 : 1));
+    src_end = src + (pSetPointerShape->Pitch * pSetPointerShape->Height * num_images);
     for (; src != src_end; src += pSetPointerShape->Pitch) {
         PutBytesAlign(&chunk, &now, &end, src, line_size,
                  PAGE_SIZE, 1);
