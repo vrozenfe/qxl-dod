@@ -102,7 +102,7 @@ NTSTATUS QxlDod::CheckHardware()
     Status = STATUS_GRAPHICS_DRIVER_MISMATCH;
     if (Header.VendorID == REDHAT_PCI_VENDOR_ID &&
         Header.DeviceID == 0x0100 &&
-        Header.RevisionID == 4)
+        Header.RevisionID >= 4)
     {
         Status = STATUS_SUCCESS;
     }
