@@ -1,0 +1,16 @@
+* -text=auto
+
+#These files have CRLF line endings, git shouldn't attempt to change that.
+qxldod[[:space:]]Package/qxldod[[:space:]]Package.vcxproj -text
+qxldod[[:space:]]Package/qxldod[[:space:]]Package.vcxproj.filters -text
+qxldod.sln -text
+qxldod/BaseObject.cpp -text
+qxldod/BaseObject.h -text
+qxldod/QxlDod.cpp -text
+qxldod/QxlDod.h -text
+qxldod/buildAll.bat -text
+qxldod/clean.bat -text
+qxldod/driver.cpp -text
+qxldod/driver.h -text
+qxldod/qxldod.vcxproj -text
+qxldod/resource.h -text
