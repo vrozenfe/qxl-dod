@@ -1,6 +1,7 @@
 #pragma once
 #include "baseobject.h"
 #include "qxl_dev.h"
+#include "qxl_windows.h"
 #include "mspace.h"
 
 #define MAX_CHILDREN               1
@@ -505,6 +506,7 @@ private:
     UINT64 VA(QXLPHYSICAL paddr, UINT8 slot_id);
     QXLPHYSICAL PA(PVOID virt, UINT8 slot_id);
     void InitDeviceMemoryResources(void);
+    void InitMonitorConfig();
     void InitMspace(UINT32 mspace_type, UINT8 *start, size_t capacity);
     void FlushReleaseRing();
     void FreeMem(UINT32 mspace_type, void *ptr);
@@ -532,6 +534,10 @@ private:
     void DpcCallback(PDPC_CB_CONTEXT);
     void AsyncIo(UCHAR  Port, UCHAR Value);
     void SyncIo(UCHAR  Port, UCHAR Value);
+    NTSTATUS UpdateChildStatus(BOOLEAN connect);
+    NTSTATUS SetCustomDisplay(QXLEscapeSetCustomDisplay* custom_display);
+    void SetMonitorConfig(QXLHead* monitor_config);
+
 private:
     PUCHAR m_IoBase;
     BOOLEAN m_IoMapped;
@@ -576,6 +582,9 @@ private:
 
     UINT64 m_FreeOutputs;
     UINT32 m_Pending;
+
+    QXLMonitorsConfig* m_monitor_config;
+    QXLPHYSICAL* m_monitor_config_pa;
 };
 
 class QxlDod {
