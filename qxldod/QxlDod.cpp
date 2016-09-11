@@ -2602,7 +2602,7 @@ NTSTATUS VgaDevice::HWClose(void)
     return STATUS_SUCCESS;
 }
 
-NTSTATUS VgaDevice::SetPowerState(_In_  DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo)
+NTSTATUS VgaDevice::SetPowerState(DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
     PAGED_CODE();
 
