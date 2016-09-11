@@ -3454,14 +3454,14 @@ void QxlDevice::DestroyPrimarySurface(void)
 _inline QXLPHYSICAL QxlDevice::PA(PVOID virt, UINT8 slot_id)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s\n", __FUNCTION__));
-    MemSlot *pSlot = &m_MemSlots[slot_id];;
+    MemSlot *pSlot = &m_MemSlots[slot_id];
     return pSlot->high_bits | ((UINT64)virt - pSlot->start_virt_addr);
 }
 
 _inline UINT64 QxlDevice::VA(QXLPHYSICAL paddr, UINT8 slot_id)
 {
     UINT64 virt;
-    MemSlot *pSlot = &m_MemSlots[slot_id];;
+    MemSlot *pSlot = &m_MemSlots[slot_id];
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     virt = paddr & m_VaSlotMask;
@@ -3885,7 +3885,7 @@ UINT64 QxlDevice::ReleaseOutput(UINT64 output_id)
         RELEASE_RES(*now);
     }
     next = *(UINT64*)output->data;
-    FreeMem(MSPACE_TYPE_DEVRAM, output);
+    FreeMem(MSPACE_TYPE_VRAM, output);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<---%s\n", __FUNCTION__));
     return next;
 }
@@ -3962,7 +3962,7 @@ QXLDrawable *QxlDevice::GetDrawable()
 {
     QXLOutput *output;
 
-    output = (QXLOutput *)AllocMem(MSPACE_TYPE_DEVRAM, sizeof(QXLOutput) + sizeof(QXLDrawable), TRUE);
+    output = (QXLOutput *)AllocMem(MSPACE_TYPE_VRAM, sizeof(QXLOutput) + sizeof(QXLDrawable), TRUE);
     output->num_res = 0;
     RESOURCE_TYPE(output, RESOURCE_TYPE_DRAWABLE);
     ((QXLDrawable *)output->data)->release_info.id = (UINT64)output;
@@ -3976,7 +3976,7 @@ QXLCursorCmd *QxlDevice::CursorCmd()
     QXLOutput *output;
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
-    output = (QXLOutput *)AllocMem(MSPACE_TYPE_DEVRAM, sizeof(QXLOutput) + sizeof(QXLCursorCmd), TRUE);
+    output = (QXLOutput *)AllocMem(MSPACE_TYPE_VRAM, sizeof(QXLOutput) + sizeof(QXLCursorCmd), TRUE);
     output->num_res = 0;
     RESOURCE_TYPE(output, RESOURCE_TYPE_CURSOR);
     cursor_cmd = (QXLCursorCmd *)output->data;
@@ -3996,7 +3996,7 @@ BOOL QxlDevice::SetClip(const RECT *clip, QXLDrawable *drawable)
     }
 
     QXLClipRects *rects;
-    rects_res = (Resource *)AllocMem(MSPACE_TYPE_DEVRAM, sizeof(Resource) + sizeof(QXLClipRects) +
+    rects_res = (Resource *)AllocMem(MSPACE_TYPE_VRAM, sizeof(Resource) + sizeof(QXLClipRects) +
                                         sizeof(QXLRect), TRUE);
     rects_res->refs = 1;
     rects_res->free = FreeClipRectsEx;
@@ -4010,7 +4010,7 @@ BOOL QxlDevice::SetClip(const RECT *clip, QXLDrawable *drawable)
 
     DrawableAddRes(drawable, rects_res);
     drawable->clip.type = SPICE_CLIP_TYPE_RECTS;
-    drawable->clip.data = PA(rects_res->res, m_MainMemSlot);
+    drawable->clip.data = PA(rects_res->res, m_SurfaceMemSlot);
     return TRUE;
 }
 
@@ -4050,11 +4050,11 @@ void QxlDevice::FreeClipRects(Resource *res)
 
     chunk_phys = ((QXLClipRects *)res->res)->chunk.next_chunk;
     while (chunk_phys) {
-        QXLDataChunk *chunk = (QXLDataChunk *)VA(chunk_phys, m_MainMemSlot);
+        QXLDataChunk *chunk = (QXLDataChunk *)VA(chunk_phys, m_SurfaceMemSlot);
         chunk_phys = chunk->next_chunk;
-        FreeMem(MSPACE_TYPE_DEVRAM, chunk);
+        FreeMem(MSPACE_TYPE_VRAM, chunk);
     }
-    FreeMem(MSPACE_TYPE_DEVRAM, res);
+    FreeMem(MSPACE_TYPE_VRAM, res);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
@@ -4075,12 +4075,12 @@ void QxlDevice::FreeBitmapImage(Resource *res)
 
     chunk_phys = ((QXLDataChunk *)(&internal->image.bitmap + 1))->next_chunk;
     while (chunk_phys) {
-        QXLDataChunk *chunk = (QXLDataChunk *)VA(chunk_phys, m_MainMemSlot);
+        QXLDataChunk *chunk = (QXLDataChunk *)VA(chunk_phys, m_SurfaceMemSlot);
         chunk_phys = chunk->next_chunk;
-        FreeMem(MSPACE_TYPE_DEVRAM, chunk);
+        FreeMem(MSPACE_TYPE_VRAM, chunk);
     }
 
-    FreeMem(MSPACE_TYPE_DEVRAM, res);
+    FreeMem(MSPACE_TYPE_VRAM, res);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
@@ -4098,12 +4098,12 @@ void QxlDevice::FreeCursor(Resource *res)
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     chunk_phys = ((InternalCursor *)res->res)->cursor.chunk.next_chunk;
     while (chunk_phys) {
-        QXLDataChunk *chunk = (QXLDataChunk *)VA(chunk_phys, m_MainMemSlot);
+        QXLDataChunk *chunk = (QXLDataChunk *)VA(chunk_phys, m_SurfaceMemSlot);
         chunk_phys = chunk->next_chunk;
-        FreeMem(MSPACE_TYPE_DEVRAM, chunk);
+        FreeMem(MSPACE_TYPE_VRAM, chunk);
     }
 
-    FreeMem(MSPACE_TYPE_DEVRAM, res);
+    FreeMem(MSPACE_TYPE_VRAM, res);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
@@ -4143,7 +4143,7 @@ void QxlDevice::PushDrawable(QXLDrawable *drawable) {
     WaitForCmdRing();
     cmd = SPICE_RING_PROD_ITEM(m_CommandRing);
     cmd->type = QXL_CMD_DRAW;
-    cmd->data = PA(drawable, m_MainMemSlot);
+    cmd->data = PA(drawable, m_SurfaceMemSlot);
     PushCmd();
     ReleaseMutex(&m_CmdLock, locked);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
@@ -4160,7 +4160,7 @@ void QxlDevice::PushCursorCmd(QXLCursorCmd *cursor_cmd)
     WaitForCursorRing();
     cmd = SPICE_RING_PROD_ITEM(m_CursorRing);
     cmd->type = QXL_CMD_CURSOR;
-    cmd->data = PA(cursor_cmd, m_MainMemSlot);
+    cmd->data = PA(cursor_cmd, m_SurfaceMemSlot);
     PushCursor();
     ReleaseMutex(&m_CrsLock, locked);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
@@ -4232,7 +4232,7 @@ VOID QxlDevice::BltBits (
 
     alloc_size = BITMAP_ALLOC_BASE + BITS_BUF_MAX - BITS_BUF_MAX % line_size;
     alloc_size = MIN(BITMAP_ALLOC_BASE + height * line_size, alloc_size);
-    image_res = (Resource*)AllocMem(MSPACE_TYPE_DEVRAM, alloc_size, TRUE);
+    image_res = (Resource*)AllocMem(MSPACE_TYPE_VRAM, alloc_size, TRUE);
 
     image_res->refs = 1;
     image_res->free = FreeBitmapImageEx;
@@ -4246,7 +4246,7 @@ VOID QxlDevice::BltBits (
     chunk->data_size = 0;
     chunk->prev_chunk = 0;
     chunk->next_chunk = 0;
-    internal->image.bitmap.data = PA(chunk, m_MainMemSlot);
+    internal->image.bitmap.data = PA(chunk, m_SurfaceMemSlot);
     internal->image.bitmap.flags = 0;
     internal->image.descriptor.width = internal->image.bitmap.x = width;
     internal->image.descriptor.height = internal->image.bitmap.y = height;
@@ -4269,7 +4269,7 @@ VOID QxlDevice::BltBits (
 
     internal->image.bitmap.palette = 0;
 
-    drawable->u.copy.src_bitmap = PA(&internal->image, m_MainMemSlot);
+    drawable->u.copy.src_bitmap = PA(&internal->image, m_SurfaceMemSlot);
 
     CopyRect(&drawable->surfaces_rects[1], pRect);
     DrawableAddRes(drawable, image_res);
@@ -4301,9 +4301,9 @@ VOID QxlDevice::PutBytesAlign(QXLDataChunk **chunk_ptr, UINT8 **now_ptr,
             aligned_size = (int)MIN(alloc_size + alignment - 1, BITS_BUF_MAX);
             aligned_size -=  aligned_size % alignment;
 
-            void *ptr = AllocMem(MSPACE_TYPE_DEVRAM, size + sizeof(QXLDataChunk), TRUE);
-            chunk->next_chunk = PA(ptr, m_MainMemSlot);
-            ((QXLDataChunk *)ptr)->prev_chunk = PA(chunk, m_MainMemSlot);
+            void *ptr = AllocMem(MSPACE_TYPE_VRAM, size + sizeof(QXLDataChunk), TRUE);
+            chunk->next_chunk = PA(ptr, m_SurfaceMemSlot);
+            ((QXLDataChunk *)ptr)->prev_chunk = PA(chunk, m_SurfaceMemSlot);
             chunk = (QXLDataChunk *)ptr;
             chunk->data_size = 0;
             chunk->next_chunk = 0;
@@ -4392,7 +4392,7 @@ NTSTATUS  QxlDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPoi
     cursor_cmd->u.set.position.x = 0;
     cursor_cmd->u.set.position.y = 0;
 
-    res = (Resource *)AllocMem(MSPACE_TYPE_DEVRAM, CURSOR_ALLOC_SIZE, TRUE);
+    res = (Resource *)AllocMem(MSPACE_TYPE_VRAM, CURSOR_ALLOC_SIZE, TRUE);
     res->refs = 1;
     res->free = FreeCursorEx;
     res->ptr = this;
@@ -4434,7 +4434,7 @@ NTSTATUS  QxlDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPoi
     }
     CursorCmdAddRes(cursor_cmd, res);
     RELEASE_RES(res);
-    cursor_cmd->u.set.shape = PA(&internal->cursor, m_MainMemSlot);
+    cursor_cmd->u.set.shape = PA(&internal->cursor, m_SurfaceMemSlot);
     PushCursorCmd(cursor_cmd);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 
