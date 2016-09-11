@@ -3192,7 +3192,7 @@ NTSTATUS QxlDevice::SetPowerState(_In_ DEVICE_POWER_STATE DevicePowerState, DXGK
 NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
-    PDXGKRNL_INTERFACE pDxgkInterface = m_pQxlDod->GetDxgkInterrface();
+    PDXGKRNL_INTERFACE pDxgkInterface = m_pQxlDod->GetDxgkInterface();
     UINT pci_range = QXL_RAM_RANGE_INDEX;
     for (ULONG i = 0; i < pResList->Count; ++i)
     {
@@ -3369,7 +3369,7 @@ void QxlDevice::QxlClose()
 
 void QxlDevice::UnmapMemory(void)
 {
-    PDXGKRNL_INTERFACE pDxgkInterface = m_pQxlDod->GetDxgkInterrface();
+    PDXGKRNL_INTERFACE pDxgkInterface = m_pQxlDod->GetDxgkInterface();
     if (m_IoMapped && m_IoBase)
     {
         pDxgkInterface->DxgkCbUnmapMemory( pDxgkInterface->DeviceHandle, &m_IoBase);

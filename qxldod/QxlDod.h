@@ -212,9 +212,9 @@ typedef struct _CURRENT_BDD_MODE
 
 class QxlDod;
 
-class HwDeviceIntrface {
+class HwDeviceInterface {
 public:
-    virtual ~HwDeviceIntrface() {;}
+    virtual ~HwDeviceInterface() {;}
     virtual NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode) = 0;
     virtual NTSTATUS SetCurrentMode(ULONG Mode) = 0;
     virtual NTSTATUS GetCurrentMode(ULONG* Mode) = 0;
@@ -261,7 +261,7 @@ protected:
 };
 
 class VgaDevice  :
-    public HwDeviceIntrface
+    public HwDeviceInterface
 {
 public:
     VgaDevice(_In_ QxlDod* pQxlDod);
@@ -434,7 +434,7 @@ typedef struct DpcCbContext {
 #define ALIGN(a, b) (((a) + ((b) - 1)) & ~((b) - 1))
 
 class QxlDevice  :
-    public HwDeviceIntrface
+    public HwDeviceInterface
 {
 public:
     QxlDevice(_In_ QxlDod* pQxlDod);
@@ -592,7 +592,8 @@ private:
 
     D3DDDI_VIDEO_PRESENT_SOURCE_ID m_SystemDisplaySourceId;
     DXGKARG_SETPOINTERSHAPE m_PointerShape;
-    HwDeviceIntrface* m_pHWDevice;
+
+    HwDeviceInterface* m_pHWDevice;
     DWORD m_VgaCompatible;
     DWORD m_PointerCaps;
 public:
@@ -687,7 +688,7 @@ public:
                                  _In_                                     UINT  SourceStride,
                                  _In_                                     INT   PositionX,
                                  _In_                                     INT   PositionY);
-    PDXGKRNL_INTERFACE GetDxgkInterrface(void) { return &m_DxgkInterface;}
+    PDXGKRNL_INTERFACE GetDxgkInterface(void) { return &m_DxgkInterface;}
 private:
     VOID CleanUp(VOID);
     NTSTATUS CheckHardware();
