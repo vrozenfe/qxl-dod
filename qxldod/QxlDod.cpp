@@ -2900,6 +2900,7 @@ VOID VgaDevice::ResetDevice(VOID)
 
 NTSTATUS VgaDevice::AcquireFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode)
 {
+    PAGED_CODE();
     if (pCurrentBddMode->Flags.DoNotMapOrUnmap) {
         return STATUS_UNSUCCESSFUL;
     }
@@ -2918,6 +2919,7 @@ NTSTATUS VgaDevice::AcquireFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode)
 
 NTSTATUS VgaDevice::ReleaseFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode)
 {
+    PAGED_CODE();
     NTSTATUS status = UnmapFrameBuffer(pCurrentBddMode->FrameBuffer.Ptr, pCurrentBddMode->DispInfo.Height * pCurrentBddMode->DispInfo.Pitch);
     pCurrentBddMode->FrameBuffer.Ptr = NULL;
     pCurrentBddMode->Flags.FrameBufferIsActive = FALSE;
@@ -4563,6 +4565,7 @@ void QxlDevice::SetMonitorConfig(QXLHead * monitor_config)
 
 LONG QxlDevice::GetMaxSourceMappingHeight(D3DKMT_MOVE_RECT* Moves, ULONG NumMoves, RECT* DirtyRects, ULONG NumDirtyRects)
 {
+    PAGED_CODE();
     LONG maxHeight = 0;
     if (Moves != NULL) {
         for (UINT i = 0; i < NumMoves; i++) {
