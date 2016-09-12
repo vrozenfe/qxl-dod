@@ -2,8 +2,7 @@
 #include "qxldod.h"
 #include "qxl_windows.h"
 
-#pragma code_seg(push)
-#pragma code_seg()
+#pragma code_seg("PAGE")
 
 #define WIN_QXL_INT_MASK ((QXL_INTERRUPT_DISPLAY) | \
                           (QXL_INTERRUPT_CURSOR) | \
@@ -46,8 +45,6 @@ BYTE PixelMask[BITS_PER_BYTE]  = {0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01
                                        ((ULONG)LOWER_6_BITS((Pixel) >> SHIFT_FOR_MIDDLE_6_IN_565) << SHIFT_MIDDLE_6_IN_565_BACK) | \
                                        ((ULONG)LOWER_5_BITS((Pixel)) << SHIFT_LOWER_5_IN_565_BACK))
 
-
-#pragma code_seg(pop)
 
 struct QXLEscape {
     uint32_t ioctl;
@@ -1618,9 +1615,7 @@ NTSTATUS QxlDod::UpdateActiveVidPnPresentPath(_In_ CONST DXGKARG_UPDATEACTIVEVID
 //
 // Non-Paged Code
 //
-#pragma code_seg(push)
-#pragma code_seg()
-
+QXL_NON_PAGED
 VOID QxlDod::DpcRoutine(VOID)
 {
     DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
@@ -1629,6 +1624,7 @@ VOID QxlDod::DpcRoutine(VOID)
     DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
 }
 
+QXL_NON_PAGED
 BOOLEAN QxlDod::InterruptRoutine(_In_  ULONG MessageNumber)
 {
     DbgPrint(TRACE_LEVEL_INFORMATION, ("<--> 0 %s\n", __FUNCTION__));
@@ -1638,6 +1634,7 @@ BOOLEAN QxlDod::InterruptRoutine(_In_  ULONG MessageNumber)
     return FALSE;
 }
 
+QXL_NON_PAGED
 VOID QxlDod::ResetDevice(VOID)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
@@ -1645,6 +1642,7 @@ VOID QxlDod::ResetDevice(VOID)
 }
 
 // Must be Non-Paged, as it sets up the display for a bugcheck
+QXL_NON_PAGED
 NTSTATUS QxlDod::SystemDisplayEnable(_In_  D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
                                                    _In_  PDXGKARG_SYSTEM_DISPLAY_ENABLE_FLAGS Flags,
                                                    _Out_ UINT* pWidth,
@@ -1701,6 +1699,7 @@ NTSTATUS QxlDod::SystemDisplayEnable(_In_  D3DDDI_VIDEO_PRESENT_TARGET_ID Target
 }
 
 // Must be Non-Paged, as it is called to display the bugcheck screen
+QXL_NON_PAGED
 VOID QxlDod::SystemDisplayWrite(_In_reads_bytes_(SourceHeight * SourceStride) VOID* pSource,
                                               _In_ UINT SourceWidth,
                                               _In_ UINT SourceHeight,
@@ -1747,7 +1746,7 @@ VOID QxlDod::SystemDisplayWrite(_In_reads_bytes_(SourceHeight * SourceStride) VO
 
 }
 
-#pragma code_seg(pop) // End Non-Paged Code
+// End Non-Paged Code
 
 NTSTATUS QxlDod::WriteHWInfoStr(_In_ HANDLE DevInstRegKeyHandle, _In_ PCWSTR pszwValueName, _In_ PCSTR pszValue)
 {
@@ -1922,11 +1921,7 @@ NTSTATUS QxlDod::ReadConfiguration()
     return Status;
 }
 
-//
-// Non-Paged Code
-//
-#pragma code_seg(push)
-#pragma code_seg()
+QXL_NON_PAGED
 D3DDDI_VIDEO_PRESENT_SOURCE_ID QxlDod::FindSourceForTarget(D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId, BOOLEAN DefaultToZero)
 {
     UNREFERENCED_PARAMETER(TargetId);
@@ -1940,8 +1935,6 @@ D3DDDI_VIDEO_PRESENT_SOURCE_ID QxlDod::FindSourceForTarget(D3DDDI_VIDEO_PRESENT_
 
     return DefaultToZero ? 0 : D3DDDI_ID_UNINITIALIZED;
 }
-
-#pragma code_seg(pop) // End Non-Paged Code
 
 //
 // Frame buffer map/unmap
@@ -2022,6 +2015,7 @@ UnmapFrameBuffer(
 
 // HW specific code
 
+QXL_NON_PAGED
 VOID GetPitches(_In_ CONST BLT_INFO* pBltInfo, _Out_ LONG* pPixelPitch, _Out_ LONG* pRowPitch)
 {
     switch (pBltInfo->Rotation)
@@ -2060,6 +2054,7 @@ VOID GetPitches(_In_ CONST BLT_INFO* pBltInfo, _Out_ LONG* pPixelPitch, _Out_ LO
     }
 }
 
+QXL_NON_PAGED
 BYTE* GetRowStart(_In_ CONST BLT_INFO* pBltInfo, CONST RECT* pRect)
 {
     BYTE* pRet = NULL;
@@ -2123,6 +2118,7 @@ BYTE* GetRowStart(_In_ CONST BLT_INFO* pBltInfo, CONST RECT* pRect)
  *
 \**************************************************************************/
 
+QXL_NON_PAGED
 VOID CopyBitsGeneric(
     BLT_INFO* pDst,
     CONST BLT_INFO* pSrc,
@@ -2217,6 +2213,7 @@ VOID CopyBitsGeneric(
 }
 
 
+QXL_NON_PAGED
 VOID CopyBits32_32(
     BLT_INFO* pDst,
     CONST BLT_INFO* pSrc,
@@ -2258,6 +2255,7 @@ VOID CopyBits32_32(
 }
 
 
+QXL_NON_PAGED
 VOID BltBits (
     BLT_INFO* pDst,
     CONST BLT_INFO* pSrc,
@@ -2883,6 +2881,7 @@ VOID VgaDevice::BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod)
     pCurrentBddMod->ZeroedOutEnd.QuadPart = NewPhysAddrEnd.QuadPart;
 }
 
+QXL_NON_PAGED
 BOOLEAN VgaDevice::InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber)
 {
     UNREFERENCED_PARAMETER(pDxgkInterface);
@@ -2890,10 +2889,12 @@ BOOLEAN VgaDevice::InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_
     return FALSE;
 }
 
+QXL_NON_PAGED
 VOID VgaDevice::DpcRoutine(PVOID)
 {
 }
 
+QXL_NON_PAGED
 VOID VgaDevice::ResetDevice(VOID)
 {
 }
@@ -3623,6 +3624,7 @@ void QxlDevice::InitMspace(UINT32 mspace_type, UINT8 *start, size_t capacity)
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s _mspace = %p\n", __FUNCTION__, m_MSInfo[mspace_type]._mspace));
 }
 
+QXL_NON_PAGED
 void QxlDevice::ResetDevice(void)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
@@ -4688,6 +4690,7 @@ VOID QxlDevice::PushCursor(VOID)
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s notify = %d\n", __FUNCTION__, notify));
 }
 
+QXL_NON_PAGED
 BOOLEAN QxlDevice::InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber)
 {
     UNREFERENCED_PARAMETER(MessageNumber);
@@ -4708,6 +4711,7 @@ BOOLEAN QxlDevice::InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_
     return TRUE;
 }
 
+QXL_NON_PAGED
 VOID QxlDevice::DpcRoutine(PVOID ptr)
 {
     PDXGKRNL_INTERFACE pDxgkInterface = (PDXGKRNL_INTERFACE)ptr;
@@ -4744,6 +4748,7 @@ VOID QxlDevice::DpcRoutine(PVOID ptr)
 
 VOID QxlDevice::UpdateArea(CONST RECT* area, UINT32 surface_id)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     CopyRect(&m_RamHdr->update_area, area);
     m_RamHdr->update_surface = surface_id;
@@ -4752,6 +4757,7 @@ VOID QxlDevice::UpdateArea(CONST RECT* area, UINT32 surface_id)
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
+QXL_NON_PAGED
 BOOLEAN QxlDevice:: DpcCallbackEx(PVOID ptr)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s\n", __FUNCTION__));
@@ -4761,6 +4767,7 @@ BOOLEAN QxlDevice:: DpcCallbackEx(PVOID ptr)
     return TRUE;
 }
 
+QXL_NON_PAGED
 VOID QxlDevice::DpcCallback(PDPC_CB_CONTEXT ctx)
 {
     ctx->data = m_Pending;
@@ -4768,6 +4775,7 @@ VOID QxlDevice::DpcCallback(PDPC_CB_CONTEXT ctx)
 
 }
 
+QXL_NON_PAGED
 UINT BPPFromPixelFormat(D3DDDIFORMAT Format)
 {
     switch (Format)
@@ -4783,6 +4791,7 @@ UINT BPPFromPixelFormat(D3DDDIFORMAT Format)
 }
 
 // Given bits per pixel, return the pixel format at the same bpp
+QXL_NON_PAGED
 D3DDDIFORMAT PixelFormatFromBPP(UINT BPP)
 {
     switch (BPP)

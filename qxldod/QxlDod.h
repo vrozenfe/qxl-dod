@@ -14,6 +14,8 @@
 #define QXL_BPP                    32
 #define VGA_BPP                    24
 
+#define QXL_NON_PAGED __declspec(code_seg(".text"))
+
 typedef struct _QXL_FLAGS
 {
     UINT DriverStarted           : 1; // ( 1) 1 after StartDevice and 0 after StopDevice
@@ -222,9 +224,9 @@ public:
     virtual NTSTATUS SetPowerState(DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
     virtual NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
     virtual NTSTATUS HWClose(void) = 0;
-    virtual BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber) = 0;
-    virtual VOID DpcRoutine(PVOID) = 0;
-    virtual VOID ResetDevice(void) = 0;
+    QXL_NON_PAGED virtual BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber) = 0;
+    QXL_NON_PAGED virtual VOID DpcRoutine(PVOID) = 0;
+    QXL_NON_PAGED virtual VOID ResetDevice(void) = 0;
     virtual NTSTATUS AcquireFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode) { return STATUS_SUCCESS; }
     virtual NTSTATUS ReleaseFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode) { return STATUS_SUCCESS; }
 
@@ -290,9 +292,9 @@ public:
                                  _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation,
                                  _In_ const CURRENT_BDD_MODE* pModeCur);
     VOID BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod);
-    BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
-    VOID DpcRoutine(PVOID);
-    VOID ResetDevice(VOID);
+    QXL_NON_PAGED BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
+    QXL_NON_PAGED VOID DpcRoutine(PVOID);
+    QXL_NON_PAGED VOID ResetDevice(VOID);
     NTSTATUS AcquireFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode);
     NTSTATUS ReleaseFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode);
     NTSTATUS SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape);
@@ -465,9 +467,9 @@ public:
                     _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation,
                     _In_ const CURRENT_BDD_MODE* pModeCur);
     VOID BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod);
-    BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
-    VOID DpcRoutine(PVOID);
-    VOID ResetDevice(VOID);
+    QXL_NON_PAGED BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
+    QXL_NON_PAGED VOID DpcRoutine(PVOID);
+    QXL_NON_PAGED VOID ResetDevice(VOID);
     NTSTATUS SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape);
     NTSTATUS SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition);
     NTSTATUS Escape(_In_ CONST DXGKARG_ESCAPE* pEscap);
@@ -535,8 +537,8 @@ private:
     void PutBytesAlign(QXLDataChunk **chunk_ptr, UINT8 **now_ptr,
                             UINT8 **end_ptr, UINT8 *src, int size,
                             size_t alloc_size, uint32_t alignment);
-    BOOLEAN static DpcCallbackEx(PVOID);
-    void DpcCallback(PDPC_CB_CONTEXT);
+    QXL_NON_PAGED BOOLEAN static DpcCallbackEx(PVOID);
+    QXL_NON_PAGED void DpcCallback(PDPC_CB_CONTEXT);
     void AsyncIo(UCHAR  Port, UCHAR Value);
     void SyncIo(UCHAR  Port, UCHAR Value);
     NTSTATUS UpdateChildStatus(BOOLEAN connect);
@@ -629,7 +631,7 @@ public:
                          _Out_ ULONG*             pNumberOfChildren);
     NTSTATUS StopDevice(VOID);
     // Must be Non-Paged
-    VOID ResetDevice(VOID);
+    QXL_NON_PAGED VOID ResetDevice(VOID);
 
     NTSTATUS DispatchIoRequest(_In_  ULONG VidPnSourceId,
                                _In_  VIDEO_REQUEST_PACKET* pVideoRequestPacket);
@@ -649,9 +651,9 @@ public:
 
     // Must be Non-Paged
     // BDD doesn't have interrupts, so just returns false
-    BOOLEAN InterruptRoutine(_In_  ULONG MessageNumber);
+    QXL_NON_PAGED BOOLEAN InterruptRoutine(_In_  ULONG MessageNumber);
 
-    VOID DpcRoutine(VOID);
+    QXL_NON_PAGED VOID DpcRoutine(VOID);
 
     // Return DriverCaps, doesn't support other queries though
     NTSTATUS QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO* pQueryAdapterInfo);
@@ -690,7 +692,7 @@ public:
 
     // Must be Non-Paged
     // Call to initialize as part of bugcheck
-    NTSTATUS SystemDisplayEnable(_In_  D3DDDI_VIDEO_PRESENT_TARGET_ID       TargetId,
+    QXL_NON_PAGED NTSTATUS SystemDisplayEnable(_In_  D3DDDI_VIDEO_PRESENT_TARGET_ID       TargetId,
                                  _In_  PDXGKARG_SYSTEM_DISPLAY_ENABLE_FLAGS Flags,
                                  _Out_ UINT*                                pWidth,
                                  _Out_ UINT*                                pHeight,
@@ -698,7 +700,7 @@ public:
 
     // Must be Non-Paged
     // Write out pixels as part of bugcheck
-    VOID SystemDisplayWrite(_In_reads_bytes_(SourceHeight * SourceStride) VOID* pSource,
+    QXL_NON_PAGED VOID SystemDisplayWrite(_In_reads_bytes_(SourceHeight * SourceStride) VOID* pSource,
                                  _In_                                     UINT  SourceWidth,
                                  _In_                                     UINT  SourceHeight,
                                  _In_                                     UINT  SourceStride,
@@ -730,7 +732,7 @@ private:
                                  D3DKMDT_HVIDPNTARGETMODESET hVidPnTargetModeSet,
                                  _In_opt_ CONST D3DKMDT_VIDPN_SOURCE_MODE* pVidPnPinnedSourceModeInfo,
                                  D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId);
-    D3DDDI_VIDEO_PRESENT_SOURCE_ID FindSourceForTarget(D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId, BOOLEAN DefaultToZero);
+    QXL_NON_PAGED D3DDDI_VIDEO_PRESENT_SOURCE_ID FindSourceForTarget(D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId, BOOLEAN DefaultToZero);
     NTSTATUS IsVidPnSourceModeFieldsValid(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMode) const;
     NTSTATUS IsVidPnPathFieldsValid(CONST D3DKMDT_VIDPN_PRESENT_PATH* pPath) const;
     NTSTATUS RegisterHWInfo(_In_ ULONG Id);
@@ -748,26 +750,26 @@ UnmapFrameBuffer(
     _In_reads_bytes_(Length) VOID* VirtualAddress,
     _In_                ULONG Length);
 
-UINT BPPFromPixelFormat(D3DDDIFORMAT Format);
-D3DDDIFORMAT PixelFormatFromBPP(UINT BPP);
+QXL_NON_PAGED UINT BPPFromPixelFormat(D3DDDIFORMAT Format);
+QXL_NON_PAGED D3DDDIFORMAT PixelFormatFromBPP(UINT BPP);
 UINT SpiceFromPixelFormat(D3DDDIFORMAT Format);
 
-VOID CopyBitsGeneric(
+QXL_NON_PAGED VOID CopyBitsGeneric(
                         BLT_INFO* pDst,
                         CONST BLT_INFO* pSrc,
                         UINT  NumRects,
                         _In_reads_(NumRects) CONST RECT *pRects);
 
-VOID CopyBits32_32(
+QXL_NON_PAGED VOID CopyBits32_32(
                         BLT_INFO* pDst,
                         CONST BLT_INFO* pSrc,
                         UINT  NumRects,
                         _In_reads_(NumRects) CONST RECT *pRects);
-VOID BltBits (
+QXL_NON_PAGED VOID BltBits (
                         BLT_INFO* pDst,
                         CONST BLT_INFO* pSrc,
                         UINT  NumRects,
                         _In_reads_(NumRects) CONST RECT *pRects);
 
-BYTE* GetRowStart(_In_ CONST BLT_INFO* pBltInfo, CONST RECT* pRect);
-VOID GetPitches(_In_ CONST BLT_INFO* pBltInfo, _Out_ LONG* pPixelPitch, _Out_ LONG* pRowPitch);
+QXL_NON_PAGED BYTE* GetRowStart(_In_ CONST BLT_INFO* pBltInfo, CONST RECT* pRect);
+QXL_NON_PAGED VOID GetPitches(_In_ CONST BLT_INFO* pBltInfo, _Out_ LONG* pPixelPitch, _Out_ LONG* pRowPitch);
