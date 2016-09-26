@@ -63,6 +63,7 @@ QxlDod::QxlDod(_In_ DEVICE_OBJECT* pPhysicalDeviceObject) : m_pPhysicalDevice(pP
 {
     DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
     *((UINT*)&m_Flags) = 0;
+    m_Flags.DriverStarted = FALSE;
     RtlZeroMemory(&m_DxgkInterface, sizeof(m_DxgkInterface));
     RtlZeroMemory(&m_DeviceInfo, sizeof(m_DeviceInfo));
     RtlZeroMemory(m_CurrentModes, sizeof(m_CurrentModes));
@@ -1677,7 +1678,10 @@ VOID QxlDod::DpcRoutine(VOID)
 BOOLEAN QxlDod::InterruptRoutine(_In_  ULONG MessageNumber)
 {
     DbgPrint(TRACE_LEVEL_INFORMATION, ("<--> 0 %s\n", __FUNCTION__));
-    return m_pHWDevice->InterruptRoutine(&m_DxgkInterface, MessageNumber);
+    if (m_Flags.DriverStarted && m_pHWDevice) {
+        return m_pHWDevice->InterruptRoutine(&m_DxgkInterface, MessageNumber);
+    }
+    return FALSE;
 }
 
 VOID QxlDod::ResetDevice(VOID)
