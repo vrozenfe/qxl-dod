@@ -1537,7 +1537,6 @@ NTSTATUS QxlDod::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMo
     {
 
         pCurrentBddMode->Flags.FrameBufferIsActive = TRUE;
-        m_pHWDevice->BlackOutScreen(&m_CurrentModes[pPath->VidPnSourceId]);
 
         // Mark that the next present should be fullscreen so the screen doesn't go from black to actual pixels one dirty rect at a time.
         pCurrentBddMode->Flags.FullscreenPresent = TRUE;
