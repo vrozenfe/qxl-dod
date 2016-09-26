@@ -509,40 +509,36 @@ NTSTATUS QxlDod::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DISPLAYONLY* pPre
         return STATUS_SUCCESS;
     }
 
-    if (m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].Flags.FrameBufferIsActive)
+    // If actual pixels are coming through, will need to completely zero out physical address next time in BlackOutScreen
+    m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].ZeroedOutStart.QuadPart = 0;
+    m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].ZeroedOutEnd.QuadPart = 0;
+
+
+    D3DKMDT_VIDPN_PRESENT_PATH_ROTATION RotationNeededByFb = pPresentDisplayOnly->Flags.Rotate ?
+                                                             m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].Rotation :
+                                                             D3DKMDT_VPPR_IDENTITY;
+    BYTE* pDst = (BYTE*)m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].FrameBuffer.Ptr;
+    UINT DstBitPerPixel = BPPFromPixelFormat(m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].DispInfo.ColorFormat);
+    if (m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].Scaling == D3DKMDT_VPPS_CENTERED)
     {
-
-        // If actual pixels are coming through, will need to completely zero out physical address next time in BlackOutScreen
-        m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].ZeroedOutStart.QuadPart = 0;
-        m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].ZeroedOutEnd.QuadPart = 0;
-
-
-        D3DKMDT_VIDPN_PRESENT_PATH_ROTATION RotationNeededByFb = pPresentDisplayOnly->Flags.Rotate ?
-                                                                 m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].Rotation :
-                                                                 D3DKMDT_VPPR_IDENTITY;
-        BYTE* pDst = (BYTE*)m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].FrameBuffer.Ptr;
-        UINT DstBitPerPixel = BPPFromPixelFormat(m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].DispInfo.ColorFormat);
-        if (m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].Scaling == D3DKMDT_VPPS_CENTERED)
-        {
-            UINT CenterShift = (m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].DispInfo.Height -
-                m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].SrcModeHeight)*m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].DispInfo.Pitch;
-            CenterShift += (m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].DispInfo.Width -
-                m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].SrcModeWidth)*DstBitPerPixel/8;
-            pDst += (int)CenterShift/2;
-        }
-        Status = m_pHWDevice->ExecutePresentDisplayOnly(
-                            pDst,
-                            DstBitPerPixel,
-                            (BYTE*)pPresentDisplayOnly->pSource,
-                            pPresentDisplayOnly->BytesPerPixel,
-                            pPresentDisplayOnly->Pitch,
-                            pPresentDisplayOnly->NumMoves,
-                            pPresentDisplayOnly->pMoves,
-                            pPresentDisplayOnly->NumDirtyRects,
-                            pPresentDisplayOnly->pDirtyRect,
-                            RotationNeededByFb,
-                            &m_CurrentModes[0]);
+        UINT CenterShift = (m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].DispInfo.Height -
+            m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].SrcModeHeight)*m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].DispInfo.Pitch;
+        CenterShift += (m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].DispInfo.Width -
+            m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].SrcModeWidth)*DstBitPerPixel/8;
+        pDst += (int)CenterShift/2;
     }
+    Status = m_pHWDevice->ExecutePresentDisplayOnly(
+                        pDst,
+                        DstBitPerPixel,
+                        (BYTE*)pPresentDisplayOnly->pSource,
+                        pPresentDisplayOnly->BytesPerPixel,
+                        pPresentDisplayOnly->Pitch,
+                        pPresentDisplayOnly->NumMoves,
+                        pPresentDisplayOnly->pMoves,
+                        pPresentDisplayOnly->NumDirtyRects,
+                        pPresentDisplayOnly->pDirtyRect,
+                        RotationNeededByFb,
+                        &m_CurrentModes[0]);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return Status;
 }
@@ -1521,9 +1517,6 @@ NTSTATUS QxlDod::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMo
 
     if (NT_SUCCESS(Status))
     {
-
-        pCurrentBddMode->Flags.FrameBufferIsActive = TRUE;
-
         // Mark that the next present should be fullscreen so the screen doesn't go from black to actual pixels one dirty rect at a time.
         pCurrentBddMode->Flags.FullscreenPresent = TRUE;
         for (USHORT ModeIndex = 0; ModeIndex < m_pHWDevice->GetModeCount(); ++ModeIndex)
@@ -2921,11 +2914,19 @@ VOID VgaDevice::ResetDevice(VOID)
 
 NTSTATUS VgaDevice::AcquireFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode)
 {
+    if (pCurrentBddMode->Flags.DoNotMapOrUnmap) {
+        return STATUS_UNSUCCESSFUL;
+    }
+
     // Map the new frame buffer
     QXL_ASSERT(pCurrentBddMode->FrameBuffer.Ptr == NULL);
     NTSTATUS status = MapFrameBuffer(pCurrentBddMode->DispInfo.PhysicAddress,
         pCurrentBddMode->DispInfo.Pitch * pCurrentBddMode->DispInfo.Height,
         &(pCurrentBddMode->FrameBuffer.Ptr));
+    if (NT_SUCCESS(status))
+    {
+        pCurrentBddMode->Flags.FrameBufferIsActive = TRUE;
+    }
     return status;
 }
 
@@ -4336,26 +4337,23 @@ VOID QxlDevice::BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod)
     QXLDrawable *drawable;
     RECT Rect;
     PAGED_CODE();
-    if (pCurrentBddMod->Flags.FrameBufferIsActive)
+    Rect.bottom = pCurrentBddMod->SrcModeHeight;
+    Rect.top = 0;
+    Rect.left = 0;
+    Rect.right = pCurrentBddMod->SrcModeWidth;
+    if (!(drawable = Drawable(QXL_DRAW_FILL, &Rect, NULL, 0)))
     {
-        Rect.bottom = pCurrentBddMod->SrcModeHeight;
-        Rect.top = 0;
-        Rect.left = 0;
-        Rect.right = pCurrentBddMod->SrcModeWidth;
-        if (!(drawable = Drawable(QXL_DRAW_FILL, &Rect, NULL, 0)))
-        {
-            DbgPrint(TRACE_LEVEL_ERROR, ("Cannot get Drawable.\n"));
-            return;
-        }
-        drawable->u.fill.brush.type = SPICE_BRUSH_TYPE_SOLID;
-        drawable->u.fill.brush.u.color = 0;
-        drawable->u.fill.rop_descriptor = SPICE_ROPD_OP_PUT;
-        drawable->u.fill.mask.flags = 0;
-        drawable->u.fill.mask.pos.x = 0;
-        drawable->u.fill.mask.pos.y = 0;
-        drawable->u.fill.mask.bitmap = 0;
-        PushDrawable(drawable);
+        DbgPrint(TRACE_LEVEL_ERROR, ("Cannot get Drawable.\n"));
+        return;
     }
+    drawable->u.fill.brush.type = SPICE_BRUSH_TYPE_SOLID;
+    drawable->u.fill.brush.u.color = 0;
+    drawable->u.fill.rop_descriptor = SPICE_ROPD_OP_PUT;
+    drawable->u.fill.mask.flags = 0;
+    drawable->u.fill.mask.pos.x = 0;
+    drawable->u.fill.mask.pos.y = 0;
+    drawable->u.fill.mask.bitmap = 0;
+    PushDrawable(drawable);
 }
 
 NTSTATUS QxlDevice::HWClose(void)
