@@ -225,6 +225,8 @@ public:
     virtual BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber) = 0;
     virtual VOID DpcRoutine(PVOID) = 0;
     virtual VOID ResetDevice(void) = 0;
+    virtual NTSTATUS AcquireFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode) { return STATUS_SUCCESS; }
+    virtual NTSTATUS ReleaseFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode) { return STATUS_SUCCESS; }
 
     virtual ULONG GetModeCount(void) = 0;
     PVIDEO_MODE_INFORMATION GetModeInfo(UINT idx) {return &m_ModeInfo[idx];}
@@ -290,6 +292,8 @@ public:
     BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
     VOID DpcRoutine(PVOID);
     VOID ResetDevice(VOID);
+    NTSTATUS AcquireFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode);
+    NTSTATUS ReleaseFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode);
     NTSTATUS SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape);
     NTSTATUS SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition);
     NTSTATUS Escape(_In_ CONST DXGKARG_ESCAPE* pEscap);

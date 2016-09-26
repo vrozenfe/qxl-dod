@@ -222,9 +222,7 @@ VOID QxlDod::CleanUp(VOID)
     {
         if (m_CurrentModes[Source].FrameBuffer.Ptr)
         {
-            UnmapFrameBuffer(m_CurrentModes[Source].FrameBuffer.Ptr, m_CurrentModes[Source].DispInfo.Height * m_CurrentModes[Source].DispInfo.Pitch);
-            m_CurrentModes[Source].FrameBuffer.Ptr = NULL;
-            m_CurrentModes[Source].Flags.FrameBufferIsActive = FALSE;
+            m_pHWDevice->ReleaseFrameBuffer(&m_CurrentModes[Source]);
         }
     }
 }
@@ -1395,11 +1393,7 @@ NTSTATUS QxlDod::CommitVidPn(_In_ CONST DXGKARG_COMMITVIDPN* CONST pCommitVidPn)
     if (m_CurrentModes[pCommitVidPn->AffectedVidPnSourceId].FrameBuffer.Ptr &&
         !m_CurrentModes[pCommitVidPn->AffectedVidPnSourceId].Flags.DoNotMapOrUnmap)
     {
-        Status = UnmapFrameBuffer(m_CurrentModes[pCommitVidPn->AffectedVidPnSourceId].FrameBuffer.Ptr,
-                                  m_CurrentModes[pCommitVidPn->AffectedVidPnSourceId].DispInfo.Pitch * m_CurrentModes[pCommitVidPn->AffectedVidPnSourceId].DispInfo.Height);
-        m_CurrentModes[pCommitVidPn->AffectedVidPnSourceId].FrameBuffer.Ptr = NULL;
-        m_CurrentModes[pCommitVidPn->AffectedVidPnSourceId].Flags.FrameBufferIsActive = FALSE;
-
+        Status = m_pHWDevice->ReleaseFrameBuffer(&m_CurrentModes[pCommitVidPn->AffectedVidPnSourceId]);
         if (!NT_SUCCESS(Status))
         {
             goto CommitVidPnExit;
@@ -1523,15 +1517,7 @@ NTSTATUS QxlDod::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMo
     pCurrentBddMode->DispInfo.Height = pSourceMode->Format.Graphics.PrimSurfSize.cy;
     pCurrentBddMode->DispInfo.Pitch = pSourceMode->Format.Graphics.PrimSurfSize.cx * BPPFromPixelFormat(pCurrentBddMode->DispInfo.ColorFormat) / BITS_PER_BYTE;
 
-
-    if (!pCurrentBddMode->Flags.DoNotMapOrUnmap)
-    {
-        // Map the new frame buffer
-        QXL_ASSERT(pCurrentBddMode->FrameBuffer.Ptr == NULL);
-        Status = MapFrameBuffer(pCurrentBddMode->DispInfo.PhysicAddress,
-                                pCurrentBddMode->DispInfo.Pitch * pCurrentBddMode->DispInfo.Height,
-                                &(pCurrentBddMode->FrameBuffer.Ptr));
-    }
+    Status = m_pHWDevice->AcquireFrameBuffer(pCurrentBddMode);
 
     if (NT_SUCCESS(Status))
     {
@@ -2931,6 +2917,24 @@ VOID VgaDevice::DpcRoutine(PVOID)
 
 VOID VgaDevice::ResetDevice(VOID)
 {
+}
+
+NTSTATUS VgaDevice::AcquireFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode)
+{
+    // Map the new frame buffer
+    QXL_ASSERT(pCurrentBddMode->FrameBuffer.Ptr == NULL);
+    NTSTATUS status = MapFrameBuffer(pCurrentBddMode->DispInfo.PhysicAddress,
+        pCurrentBddMode->DispInfo.Pitch * pCurrentBddMode->DispInfo.Height,
+        &(pCurrentBddMode->FrameBuffer.Ptr));
+    return status;
+}
+
+NTSTATUS VgaDevice::ReleaseFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode)
+{
+    NTSTATUS status = UnmapFrameBuffer(pCurrentBddMode->FrameBuffer.Ptr, pCurrentBddMode->DispInfo.Height * pCurrentBddMode->DispInfo.Pitch);
+    pCurrentBddMode->FrameBuffer.Ptr = NULL;
+    pCurrentBddMode->Flags.FrameBufferIsActive = FALSE;
+    return status;
 }
 
 NTSTATUS  VgaDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape)
