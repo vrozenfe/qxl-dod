@@ -3666,12 +3666,11 @@ QxlDevice::ExecutePresentDisplayOnly(
     ctx->Mdl              = NULL;
     ctx->DisplaySource    = this;
 
-    // Alternate between synch and asynch execution, for demonstrating 
-    // that a real hardware implementation can do either
-
+    // Source bitmap is in user mode, must be locked under __try/__except
+    // and mapped to kernel space before use.
     {
-        // Map Source into kernel space, as Blt will be executed by system worker thread
-        UINT sizeToMap = ctx->SrcPitch * ctx->SrcHeight;
+        LONG maxHeight = GetMaxSourceMappingHeight(ctx->Moves, ctx->NumMoves, ctx->DirtyRect, ctx->NumDirtyRects);
+        UINT sizeToMap = ctx->SrcPitch * maxHeight;
 
         PMDL mdl = IoAllocateMdl((PVOID)SrcAddr, sizeToMap,  FALSE, FALSE, NULL);
         if(!mdl)
@@ -4521,6 +4520,25 @@ void QxlDevice::SetMonitorConfig(QXLHead * monitor_config)
         m_monitor_config->heads[0].x, m_monitor_config->heads[0].y,
         m_monitor_config->heads[0].width, m_monitor_config->heads[0].height));
     AsyncIo(QXL_IO_MONITORS_CONFIG_ASYNC, 0);
+}
+
+LONG QxlDevice::GetMaxSourceMappingHeight(D3DKMT_MOVE_RECT* Moves, ULONG NumMoves, RECT* DirtyRects, ULONG NumDirtyRects)
+{
+    LONG maxHeight = 0;
+    if (Moves != NULL) {
+        for (UINT i = 0; i < NumMoves; i++) {
+            const POINT&   pSourcePoint = Moves[i].SourcePoint;
+            const RECT&    pDestRect = Moves[i].DestRect;
+            maxHeight = MAX(maxHeight, pDestRect.bottom - pDestRect.top + pSourcePoint.y);
+        }
+    }
+    if (DirtyRects != NULL) {
+        for (UINT i = 0; i < NumDirtyRects; i++) {
+            const RECT&    pDirtyRect = DirtyRects[i];
+            maxHeight = MAX(maxHeight, pDirtyRect.bottom);
+        }
+    }
+    return maxHeight;
 }
 
 NTSTATUS QxlDevice::Escape(_In_ CONST DXGKARG_ESCAPE* pEscape)
