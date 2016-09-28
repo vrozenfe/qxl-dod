@@ -1467,7 +1467,7 @@ NTSTATUS QxlDod::CommitVidPn(_In_ CONST DXGKARG_COMMITVIDPN* CONST pCommitVidPn)
 
 CommitVidPnExit:
 
-    NTSTATUS TempStatus;
+    NTSTATUS TempStatus(STATUS_SUCCESS);
     UNREFERENCED_PARAMETER(TempStatus);
 
     if ((pVidPnSourceModeSetInterface != NULL) &&
@@ -1819,7 +1819,7 @@ NTSTATUS QxlDod::WriteHWInfoStr(_In_ HANDLE DevInstRegKeyHandle, _In_ PCWSTR psz
     return Status;
 }
 
-NTSTATUS QxlDod::RegisterHWInfo(ULONG Id)
+NTSTATUS QxlDod::RegisterHWInfo(_In_ ULONG Id)
 {
     PAGED_CODE();
 
@@ -3202,7 +3202,7 @@ NTSTATUS QxlDevice::GetCurrentMode(ULONG* pMode)
     return Status;
 }
 
-NTSTATUS QxlDevice::SetPowerState(_In_ DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo)
+NTSTATUS QxlDevice::SetPowerState(DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
     PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
@@ -4200,7 +4200,8 @@ QXLDrawable *QxlDevice::Drawable(UINT8 type, CONST RECT *area, CONST RECT *clip,
     return drawable;
 }
 
-void QxlDevice::PushDrawable(QXLDrawable *drawable) {
+void QxlDevice::PushDrawable(QXLDrawable *drawable)
+{
     PAGED_CODE();
     QXLCommand *cmd;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
