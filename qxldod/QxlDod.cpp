@@ -61,6 +61,7 @@ QxlDod::QxlDod(_In_ DEVICE_OBJECT* pPhysicalDeviceObject) : m_pPhysicalDevice(pP
                                                             m_MonitorPowerState(PowerDeviceD0),
                                                             m_AdapterPowerState(PowerDeviceD0)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
     *((UINT*)&m_Flags) = 0;
     m_Flags.DriverStarted = FALSE;
@@ -244,6 +245,7 @@ DbgDevicePowerString(
     __in DEVICE_POWER_STATE Type
     )
 {
+    PAGED_CODE();
     switch (Type)
     {
     case PowerDeviceUnspecified:
@@ -268,6 +270,7 @@ DbgPowerActionString(
     __in POWER_ACTION Type
     )
 {
+    PAGED_CODE();
     switch (Type)
     {
     case PowerActionNone:
@@ -2316,6 +2319,7 @@ VOID BltBits (
 
 VgaDevice::VgaDevice(_In_ QxlDod* pQxlDod)
 {
+    PAGED_CODE();
     m_pQxlDod = pQxlDod;
     m_ModeInfo = NULL;
     m_ModeCount = 0;
@@ -2326,6 +2330,7 @@ VgaDevice::VgaDevice(_In_ QxlDod* pQxlDod)
 
 VgaDevice::~VgaDevice(void)
 {
+    PAGED_CODE();
     HWClose();
     delete [] reinterpret_cast<BYTE*>(m_ModeInfo);
     delete [] reinterpret_cast<BYTE*>(m_ModeNumbers);
@@ -2566,6 +2571,7 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
 
 NTSTATUS VgaDevice::QueryCurrentMode(PVIDEO_MODE RequestedMode)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     NTSTATUS Status = STATUS_SUCCESS;
     UNREFERENCED_PARAMETER(RequestedMode);
@@ -2575,6 +2581,8 @@ NTSTATUS VgaDevice::QueryCurrentMode(PVIDEO_MODE RequestedMode)
 
 NTSTATUS VgaDevice::SetCurrentMode(ULONG Mode)
 {
+    PAGED_CODE();
+
     NTSTATUS Status = STATUS_SUCCESS;
     DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s Mode = %x\n", __FUNCTION__, Mode));
     X86BIOS_REGISTERS regs = {0};
@@ -2591,6 +2599,8 @@ NTSTATUS VgaDevice::SetCurrentMode(ULONG Mode)
 
 NTSTATUS VgaDevice::GetCurrentMode(ULONG* pMode)
 {
+    PAGED_CODE();
+
     NTSTATUS Status = STATUS_SUCCESS;
     DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
     X86BIOS_REGISTERS regs = {0};
@@ -2607,6 +2617,8 @@ NTSTATUS VgaDevice::GetCurrentMode(ULONG* pMode)
 
 NTSTATUS VgaDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
+    PAGED_CODE();
+
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     UNREFERENCED_PARAMETER(pResList);
     UNREFERENCED_PARAMETER(pDispInfo);
@@ -2616,6 +2628,8 @@ NTSTATUS VgaDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
 
 NTSTATUS VgaDevice::HWClose(void)
 {
+    PAGED_CODE();
+
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
@@ -2623,6 +2637,8 @@ NTSTATUS VgaDevice::HWClose(void)
 
 NTSTATUS VgaDevice::SetPowerState(_In_  DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
+    PAGED_CODE();
+
     DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s\n", __FUNCTION__));
 
     X86BIOS_REGISTERS regs = {0};
@@ -2940,18 +2956,21 @@ NTSTATUS VgaDevice::ReleaseFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode)
 
 NTSTATUS  VgaDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape)
 {
+    PAGED_CODE();
     UNREFERENCED_PARAMETER(pSetPointerShape);
     return STATUS_NOT_SUPPORTED;
 }
 
 NTSTATUS VgaDevice::SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition)
 {
+    PAGED_CODE();
     UNREFERENCED_PARAMETER(pSetPointerPosition);
     return STATUS_SUCCESS;
 }
 
 NTSTATUS VgaDevice::Escape(_In_ CONST DXGKARG_ESCAPE* pEscap)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_NOT_IMPLEMENTED;
@@ -2959,6 +2978,7 @@ NTSTATUS VgaDevice::Escape(_In_ CONST DXGKARG_ESCAPE* pEscap)
 
 QxlDevice::QxlDevice(_In_ QxlDod* pQxlDod)
 {
+    PAGED_CODE();
     m_pQxlDod = pQxlDod;
     m_ModeInfo = NULL;
     m_ModeCount = 0;
@@ -2971,6 +2991,7 @@ QxlDevice::QxlDevice(_In_ QxlDod* pQxlDod)
 
 QxlDevice::~QxlDevice(void)
 {
+    PAGED_CODE();
     HWClose();
     delete [] reinterpret_cast<BYTE*>(m_ModeInfo);
     delete [] reinterpret_cast<BYTE*>(m_ModeNumbers);
@@ -3144,6 +3165,7 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
 
 NTSTATUS QxlDevice::QueryCurrentMode(PVIDEO_MODE RequestedMode)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     NTSTATUS Status = STATUS_SUCCESS;
     UNREFERENCED_PARAMETER(RequestedMode);
@@ -3182,6 +3204,7 @@ NTSTATUS QxlDevice::GetCurrentMode(ULONG* pMode)
 
 NTSTATUS QxlDevice::SetPowerState(_In_ DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     switch (DevicePowerState)
     {
@@ -3197,6 +3220,7 @@ NTSTATUS QxlDevice::SetPowerState(_In_ DEVICE_POWER_STATE DevicePowerState, DXGK
 
 NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     PDXGKRNL_INTERFACE pDxgkInterface = m_pQxlDod->GetDxgkInterface();
     UINT pci_range = QXL_RAM_RANGE_INDEX;
@@ -3344,6 +3368,7 @@ NTSTATUS QxlDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
 
 NTSTATUS QxlDevice::QxlInit(DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
+    PAGED_CODE();
     NTSTATUS Status = STATUS_SUCCESS;
 
     if (!InitMemSlots()) {
@@ -3371,11 +3396,13 @@ NTSTATUS QxlDevice::QxlInit(DXGK_DISPLAY_INFORMATION* pDispInfo)
 
 void QxlDevice::QxlClose()
 {
+    PAGED_CODE();
     DestroyMemSlots();
 }
 
 void QxlDevice::UnmapMemory(void)
 {
+    PAGED_CODE();
     PDXGKRNL_INTERFACE pDxgkInterface = m_pQxlDod->GetDxgkInterface();
     if (m_IoMapped && m_IoBase)
     {
@@ -3403,6 +3430,7 @@ void QxlDevice::UnmapMemory(void)
 
 BOOL QxlDevice::InitMemSlots(void)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     m_NumMemSlots = m_RomHdr->slots_end;
     m_SlotGenBits = m_RomHdr->slot_gen_bits;
@@ -3422,6 +3450,7 @@ BOOL QxlDevice::InitMemSlots(void)
 
 void QxlDevice::DestroyMemSlots(void)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     delete [] reinterpret_cast<BYTE*>(m_MemSlots);
     m_MemSlots = NULL;
@@ -3453,6 +3482,7 @@ void QxlDevice::CreatePrimarySurface(PVIDEO_MODE_INFORMATION pModeInfo)
 
 void QxlDevice::DestroyPrimarySurface(void)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 //    AsyncIo(QXL_IO_DESTROY_PRIMARY_ASYNC, 0);
     SyncIo(QXL_IO_DESTROY_PRIMARY, 0);
@@ -3461,6 +3491,7 @@ void QxlDevice::DestroyPrimarySurface(void)
 
 _inline QXLPHYSICAL QxlDevice::PA(PVOID virt, UINT8 slot_id)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s\n", __FUNCTION__));
     MemSlot *pSlot = &m_MemSlots[slot_id];
     return pSlot->high_bits | ((UINT64)virt - pSlot->start_virt_addr);
@@ -3468,6 +3499,7 @@ _inline QXLPHYSICAL QxlDevice::PA(PVOID virt, UINT8 slot_id)
 
 _inline UINT64 QxlDevice::VA(QXLPHYSICAL paddr, UINT8 slot_id)
 {
+    PAGED_CODE();
     UINT64 virt;
     MemSlot *pSlot = &m_MemSlots[slot_id];
 
@@ -3480,6 +3512,7 @@ _inline UINT64 QxlDevice::VA(QXLPHYSICAL paddr, UINT8 slot_id)
 
 void QxlDevice::SetupHWSlot(UINT8 Idx, MemSlot *pSlot)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     m_RamHdr->mem_slot.mem_start = pSlot->start_phys_addr;
     m_RamHdr->mem_slot.mem_end = pSlot->end_phys_addr;
@@ -3489,6 +3522,7 @@ void QxlDevice::SetupHWSlot(UINT8 Idx, MemSlot *pSlot)
 
 BOOL QxlDevice::CreateEvents()
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     KeInitializeEvent(&m_DisplayEvent,
                       SynchronizationEvent,
@@ -3510,6 +3544,7 @@ BOOL QxlDevice::CreateEvents()
 
 BOOL QxlDevice::CreateRings()
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     m_CommandRing = &(m_RamHdr->cmd_ring);
     m_CursorRing = &(m_RamHdr->cursor_ring);
@@ -3520,6 +3555,7 @@ BOOL QxlDevice::CreateRings()
 
 void QxlDevice::AsyncIo(UCHAR  Port, UCHAR Value)
 {
+    PAGED_CODE();
     LARGE_INTEGER timeout;
     BOOLEAN locked = FALSE;
     locked = WaitForObject(&m_IoLock, NULL);
@@ -3531,6 +3567,7 @@ void QxlDevice::AsyncIo(UCHAR  Port, UCHAR Value)
 
 void QxlDevice::SyncIo(UCHAR  Port, UCHAR Value)
 {
+    PAGED_CODE();
     BOOLEAN locked = FALSE;
     locked = WaitForObject(&m_IoLock, NULL);
     WRITE_PORT_UCHAR(m_IoBase + Port, Value);
@@ -3539,6 +3576,7 @@ void QxlDevice::SyncIo(UCHAR  Port, UCHAR Value)
 
 UINT8 QxlDevice::SetupMemSlot(UINT8 Idx, UINT64 pastart, UINT64 paend, UINT64 vastart, UINT64 vaend)
 {
+    PAGED_CODE();
     UINT64 high_bits;
     MemSlot *pSlot;
     UINT8 slot_index;
@@ -3564,6 +3602,7 @@ UINT8 QxlDevice::SetupMemSlot(UINT8 Idx, UINT64 pastart, UINT64 paend, UINT64 va
 
 BOOL QxlDevice::CreateMemSlots(void)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s 3\n", __FUNCTION__));
     UINT64 len = m_RomHdr->surface0_area_size + m_RomHdr->num_pages * PAGE_SIZE;
     m_MainMemSlot = SetupMemSlot(0,
@@ -3603,6 +3642,7 @@ void QxlDevice::InitMonitorConfig(void)
 
 void QxlDevice::InitMspace(UINT32 mspace_type, UINT8 *start, size_t capacity)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s type = %d, start = %p, capacity = %d\n", __FUNCTION__, mspace_type, start, capacity));
     m_MSInfo[mspace_type]._mspace = create_mspace_with_base(start, capacity, 0, this);
     m_MSInfo[mspace_type].mspace_start = start;
@@ -3807,6 +3847,7 @@ QxlDevice::ExecutePresentDisplayOnly(
 
 void QxlDevice::WaitForReleaseRing(void)
 {
+    PAGED_CODE();
     int wait;
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("--->%s\n", __FUNCTION__));
@@ -3839,6 +3880,7 @@ void QxlDevice::WaitForReleaseRing(void)
 
 void QxlDevice::FlushReleaseRing()
 {
+    PAGED_CODE();
     UINT64 output;
     int notify;
     int num_to_release = 50;
@@ -3870,6 +3912,7 @@ void QxlDevice::FlushReleaseRing()
 
 void QxlDevice::EmptyReleaseRing()
 {
+    PAGED_CODE();
     BOOLEAN locked = FALSE;
     locked = WaitForObject(&m_MemLock, NULL);
     while (m_FreeOutputs || !SPICE_RING_IS_EMPTY(m_ReleaseRing)) {
@@ -3880,6 +3923,7 @@ void QxlDevice::EmptyReleaseRing()
 
 UINT64 QxlDevice::ReleaseOutput(UINT64 output_id)
 {
+    PAGED_CODE();
     QXLOutput *output = (QXLOutput *)output_id;
     Resource **now;
     Resource **end;
@@ -3899,6 +3943,7 @@ UINT64 QxlDevice::ReleaseOutput(UINT64 output_id)
 
 void *QxlDevice::AllocMem(UINT32 mspace_type, size_t size, BOOL force)
 {
+    PAGED_CODE();
     PVOID ptr;
     BOOLEAN locked = FALSE;
 
@@ -3947,6 +3992,7 @@ void *QxlDevice::AllocMem(UINT32 mspace_type, size_t size, BOOL force)
 
 void QxlDevice::FreeMem(UINT32 mspace_type, void *ptr)
 {
+    PAGED_CODE();
     ASSERT(m_MSInfo[mspace_type]._mspace);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
@@ -3967,6 +4013,7 @@ void QxlDevice::FreeMem(UINT32 mspace_type, void *ptr)
 
 QXLDrawable *QxlDevice::GetDrawable()
 {
+    PAGED_CODE();
     QXLOutput *output;
 
     output = (QXLOutput *)AllocMem(MSPACE_TYPE_VRAM, sizeof(QXLOutput) + sizeof(QXLDrawable), TRUE);
@@ -3979,6 +4026,7 @@ QXLDrawable *QxlDevice::GetDrawable()
 
 QXLCursorCmd *QxlDevice::CursorCmd()
 {
+    PAGED_CODE();
     QXLCursorCmd *cursor_cmd;
     QXLOutput *output;
 
@@ -3994,6 +4042,7 @@ QXLCursorCmd *QxlDevice::CursorCmd()
 
 BOOL QxlDevice::SetClip(const RECT *clip, QXLDrawable *drawable)
 {
+    PAGED_CODE();
     Resource *rects_res;
 
     if (clip == NULL) {
@@ -4023,12 +4072,14 @@ BOOL QxlDevice::SetClip(const RECT *clip, QXLDrawable *drawable)
 
 void QxlDevice::AddRes(QXLOutput *output, Resource *res)
 {
+    PAGED_CODE();
     res->refs++;
     output->resources[output->num_res++] = res;
 }
 
 void QxlDevice::DrawableAddRes(QXLDrawable *drawable, Resource *res)
 {
+    PAGED_CODE();
     QXLOutput *output;
 
     output = (QXLOutput *)((UINT8 *)drawable - sizeof(QXLOutput));
@@ -4037,6 +4088,7 @@ void QxlDevice::DrawableAddRes(QXLDrawable *drawable, Resource *res)
 
 void QxlDevice::CursorCmdAddRes(QXLCursorCmd *cmd, Resource *res)
 {
+    PAGED_CODE();
     QXLOutput *output;
 
     output = (QXLOutput *)((UINT8 *)cmd - sizeof(QXLOutput));
@@ -4045,6 +4097,7 @@ void QxlDevice::CursorCmdAddRes(QXLCursorCmd *cmd, Resource *res)
 
 void QxlDevice::FreeClipRectsEx(Resource *res)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s\n", __FUNCTION__));
     QxlDevice* pqxl = (QxlDevice*)res->ptr;
     pqxl->FreeClipRects(res);
@@ -4052,6 +4105,7 @@ void QxlDevice::FreeClipRectsEx(Resource *res)
 
 void QxlDevice::FreeClipRects(Resource *res)
 {
+    PAGED_CODE();
     QXLPHYSICAL chunk_phys;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
@@ -4067,6 +4121,7 @@ void QxlDevice::FreeClipRects(Resource *res)
 
 void QxlDevice::FreeBitmapImageEx(Resource *res)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s\n", __FUNCTION__));
     QxlDevice* pqxl = (QxlDevice*)res->ptr;
     pqxl->FreeBitmapImage(res);
@@ -4074,6 +4129,7 @@ void QxlDevice::FreeBitmapImageEx(Resource *res)
 
 void QxlDevice::FreeBitmapImage(Resource *res)
 {
+    PAGED_CODE();
     InternalImage *internal;
     QXLPHYSICAL chunk_phys;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
@@ -4093,6 +4149,7 @@ void QxlDevice::FreeBitmapImage(Resource *res)
 
 void QxlDevice::FreeCursorEx(Resource *res)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s\n", __FUNCTION__));
     QxlDevice* pqxl = (QxlDevice*)res->ptr;
     pqxl->FreeCursor(res);
@@ -4100,6 +4157,7 @@ void QxlDevice::FreeCursorEx(Resource *res)
 
 void QxlDevice::FreeCursor(Resource *res)
 {
+    PAGED_CODE();
     QXLPHYSICAL chunk_phys;
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
@@ -4116,6 +4174,7 @@ void QxlDevice::FreeCursor(Resource *res)
 
 QXLDrawable *QxlDevice::Drawable(UINT8 type, CONST RECT *area, CONST RECT *clip, UINT32 surface_id)
 {
+    PAGED_CODE();
     QXLDrawable *drawable;
 
     ASSERT(area);
@@ -4142,6 +4201,7 @@ QXLDrawable *QxlDevice::Drawable(UINT8 type, CONST RECT *area, CONST RECT *clip,
 }
 
 void QxlDevice::PushDrawable(QXLDrawable *drawable) {
+    PAGED_CODE();
     QXLCommand *cmd;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
@@ -4158,6 +4218,7 @@ void QxlDevice::PushDrawable(QXLDrawable *drawable) {
 
 void QxlDevice::PushCursorCmd(QXLCursorCmd *cursor_cmd)
 {
+    PAGED_CODE();
     QXLCommand *cmd;
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
@@ -4179,6 +4240,7 @@ VOID QxlDevice::SetImageId(InternalImage *internal,
     LONG height,
     UINT8 format, UINT32 key)
 {
+    PAGED_CODE();
     UINT32 image_info = IMAGE_HASH_INIT_VAL(width, height, format);
 
     if (cache_me) {
@@ -4199,6 +4261,7 @@ VOID QxlDevice::BltBits (
     _In_reads_(NumRects) CONST RECT *pRects,
     POINT*   pSourcePoint)
 {
+    PAGED_CODE();
     QXLDrawable *drawable;
     Resource *image_res;
     InternalImage *internal;
@@ -4296,6 +4359,7 @@ VOID QxlDevice::PutBytesAlign(QXLDataChunk **chunk_ptr, UINT8 **now_ptr,
                             UINT8 **end_ptr, UINT8 *src, int size,
                             size_t alloc_size, uint32_t alignment)
 {
+    PAGED_CODE();
     QXLDataChunk *chunk = *chunk_ptr;
     UINT8 *now = *now_ptr;
     UINT8 *end = *end_ptr;
@@ -4357,6 +4421,7 @@ VOID QxlDevice::BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod)
 
 NTSTATUS QxlDevice::HWClose(void)
 {
+    PAGED_CODE();
     QxlClose();
     UnmapMemory();
     return STATUS_SUCCESS;
@@ -4364,6 +4429,7 @@ NTSTATUS QxlDevice::HWClose(void)
 
 NTSTATUS  QxlDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s flag = %x\n", __FUNCTION__, pSetPointerShape->Flags.Value));
     DbgPrint(TRACE_LEVEL_INFORMATION, ("<--> %s flag = %d pitch = %d, pixels = %p, id = %d, w = %d, h = %d, x = %d, y = %d\n", __FUNCTION__,
                                  pSetPointerShape->Flags.Value,
@@ -4447,6 +4513,7 @@ NTSTATUS  QxlDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPoi
 
 NTSTATUS QxlDevice::SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition)
 {
+    PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     DbgPrint(TRACE_LEVEL_INFORMATION, ("<--> %s flag = %d id = %d, x = %d, y = %d\n", __FUNCTION__,
                                  pSetPointerPosition->Flags.Value,
@@ -4543,6 +4610,7 @@ LONG QxlDevice::GetMaxSourceMappingHeight(D3DKMT_MOVE_RECT* Moves, ULONG NumMove
 
 NTSTATUS QxlDevice::Escape(_In_ CONST DXGKARG_ESCAPE* pEscape)
 {
+    PAGED_CODE();
     size_t          data_size(sizeof(uint32_t));
     QXLEscape*     pQXLEscape((QXLEscape*) pEscape->pPrivateDriverData);
     NTSTATUS        status(STATUS_SUCCESS);
@@ -4583,6 +4651,7 @@ NTSTATUS QxlDevice::Escape(_In_ CONST DXGKARG_ESCAPE* pEscape)
 
 VOID QxlDevice::WaitForCmdRing()
 {
+    PAGED_CODE();
     int wait;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
@@ -4599,6 +4668,7 @@ VOID QxlDevice::WaitForCmdRing()
 
 VOID QxlDevice::PushCmd()
 {
+    PAGED_CODE();
     int notify;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     SPICE_RING_PUSH(m_CommandRing, notify);
@@ -4610,6 +4680,7 @@ VOID QxlDevice::PushCmd()
 
 VOID QxlDevice::WaitForCursorRing(VOID)
 {
+    PAGED_CODE();
     int wait;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
@@ -4632,6 +4703,7 @@ VOID QxlDevice::WaitForCursorRing(VOID)
 
 VOID QxlDevice::PushCursor(VOID)
 {
+    PAGED_CODE();
     int notify;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     SPICE_RING_PUSH(m_CursorRing, notify);
@@ -4750,6 +4822,7 @@ D3DDDIFORMAT PixelFormatFromBPP(UINT BPP)
 
 UINT SpiceFromPixelFormat(D3DDDIFORMAT Format)
 {
+    PAGED_CODE();
     switch (Format)
     {
         case D3DDDIFMT_UNKNOWN:
