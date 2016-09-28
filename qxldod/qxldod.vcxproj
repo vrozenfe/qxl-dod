@@ -272,12 +272,14 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BaseObject.h" />
+    <ClInclude Include="compat.h" />
     <ClInclude Include="driver.h" />
     <ClInclude Include="QxlDod.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="BaseObject.cpp" />
+    <ClCompile Include="compat.cpp" />
     <ClCompile Include="driver.cpp" />
     <ClCompile Include="mspace.c" />
     <ClCompile Include="QxlDod.cpp" />

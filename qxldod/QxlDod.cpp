@@ -1,6 +1,7 @@
 #include "driver.h"
 #include "qxldod.h"
 #include "qxl_windows.h"
+#include "compat.h"
 
 #pragma code_seg("PAGE")
 
@@ -1960,17 +1961,18 @@ MapFrameBuffer(
         return STATUS_INVALID_PARAMETER;
     }
 
-    *VirtualAddress = MmMapIoSpace(PhysicalAddress,
-                                   Length,
-                                   MmWriteCombined);
+    *VirtualAddress = MapIoSpace(PhysicalAddress,
+                                 Length,
+                                 MmWriteCombined,
+                                 PAGE_WRITECOMBINE | PAGE_READWRITE);
     if (*VirtualAddress == NULL)
     {
         // The underlying call to MmMapIoSpace failed. This may be because, MmWriteCombined
         // isn't supported, so try again with MmNonCached
-
-        *VirtualAddress = MmMapIoSpace(PhysicalAddress,
-                                       Length,
-                                       MmNonCached);
+        *VirtualAddress = MapIoSpace(PhysicalAddress,
+                                     Length,
+                                     MmNonCached,
+                                     PAGE_NOCACHE | PAGE_READWRITE);
         if (*VirtualAddress == NULL)
         {
             DbgPrint(TRACE_LEVEL_ERROR, ("MmMapIoSpace returned a NULL buffer when trying to allocate %lu bytes", Length));
