@@ -250,6 +250,7 @@ public:
     virtual NTSTATUS SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape) = 0;
     virtual NTSTATUS SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition) = 0;
     virtual NTSTATUS Escape(_In_ CONST DXGKARG_ESCAPE* pEscap) = 0;
+    NTSTATUS AcquireDisplayInfo(DXGK_DISPLAY_INFORMATION& DispInfo);
     ULONG GetId(void) { return m_Id; }
 protected:
     virtual NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
@@ -704,6 +705,10 @@ public:
                                  _In_                                     INT   PositionX,
                                  _In_                                     INT   PositionY);
     PDXGKRNL_INTERFACE GetDxgkInterface(void) { return &m_DxgkInterface;}
+    NTSTATUS AcquireDisplayInfo(DXGK_DISPLAY_INFORMATION& DispInfo)
+    {
+        return m_DxgkInterface.DxgkCbAcquirePostDisplayOwnership(m_DxgkInterface.DeviceHandle, &DispInfo);
+    }
 private:
     VOID CleanUp(VOID);
     NTSTATUS CheckHardware();

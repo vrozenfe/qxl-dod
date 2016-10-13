@@ -124,7 +124,6 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
                          _Out_ ULONG*             pNumberOfViews,
                          _Out_ ULONG*             pNumberOfChildren)
 {
-    PHYSICAL_ADDRESS PhysicAddress;
     PAGED_CODE();
     QXL_ASSERT(pDxgkStartInfo != NULL);
     QXL_ASSERT(pDxgkInterface != NULL);
@@ -174,32 +173,6 @@ NTSTATUS QxlDod::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
         QXL_LOG_ASSERTION1("RegisterHWInfo failed with status 0x%X\n",
                            Status);
         return Status;
-    }
-
-    PhysicAddress.QuadPart = m_CurrentModes[0].DispInfo.PhysicAddress.QuadPart;
-    if (m_pHWDevice->GetId() == 0)
-    {
-         Status = m_DxgkInterface.DxgkCbAcquirePostDisplayOwnership(m_DxgkInterface.DeviceHandle, &(m_CurrentModes[0].DispInfo));
-    }
-
-    if (!NT_SUCCESS(Status) )
-    {
-        DbgPrint(TRACE_LEVEL_ERROR, ("DxgkCbAcquirePostDisplayOwnership failed with status 0x%X Width = %d\n",
-                           Status, m_CurrentModes[0].DispInfo.Width));
-        return STATUS_UNSUCCESSFUL;
-    }
-
-    if (m_CurrentModes[0].DispInfo.Width == 0)
-    {
-        m_CurrentModes[0].DispInfo.Width = MIN_WIDTH_SIZE; 
-        m_CurrentModes[0].DispInfo.Height = MIN_HEIGHT_SIZE;
-        m_CurrentModes[0].DispInfo.Pitch = BPPFromPixelFormat(D3DDDIFMT_R8G8B8) / 8;
-        m_CurrentModes[0].DispInfo.ColorFormat = D3DDDIFMT_R8G8B8;
-        m_CurrentModes[0].DispInfo.TargetId = 0;
-        if (PhysicAddress.QuadPart != 0L) {
-             m_CurrentModes[0].DispInfo.PhysicAddress.QuadPart = PhysicAddress.QuadPart;
-        }
-
     }
 
    *pNumberOfViews = MAX_VIEWS;
@@ -2488,12 +2461,6 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
 
     m_CurrentMode = 0;
     DbgPrint(TRACE_LEVEL_INFORMATION, ("m_ModeInfo = 0x%p, m_ModeNumbers = 0x%p\n", m_ModeInfo, m_ModeNumbers));
-    if (Width == 0 || Height == 0 || BitsPerPixel != VGA_BPP)
-    {
-        Width = MIN_WIDTH_SIZE;
-        Height = MIN_HEIGHT_SIZE;
-        BitsPerPixel = VGA_BPP;
-    }
     for (CurrentMode = 0, SuitableModeCount = 0;
          CurrentMode < ModeCount;
          CurrentMode++)
@@ -2621,7 +2588,7 @@ NTSTATUS VgaDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     UNREFERENCED_PARAMETER(pResList);
-    UNREFERENCED_PARAMETER(pDispInfo);
+    AcquireDisplayInfo(*(pDispInfo));
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return GetModeList(pDispInfo);
 }
@@ -3391,6 +3358,7 @@ NTSTATUS QxlDevice::QxlInit(DXGK_DISPLAY_INFORMATION* pDispInfo)
     CreateMemSlots();
     InitDeviceMemoryResources();
     InitMonitorConfig();
+    Status = AcquireDisplayInfo(*(pDispInfo));
     return Status;
 }
 
@@ -4834,4 +4802,36 @@ UINT SpiceFromPixelFormat(D3DDDIFORMAT Format)
         case D3DDDIFMT_A8R8G8B8: return SPICE_SURFACE_FMT_32_xRGB;
         default: QXL_LOG_ASSERTION1("Unknown D3DDDIFORMAT 0x%I64x", Format); return 0;
     }
+}
+
+NTSTATUS HwDeviceInterface::AcquireDisplayInfo(DXGK_DISPLAY_INFORMATION& DispInfo)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+    PHYSICAL_ADDRESS PhysicAddress;
+    if (GetId() == 0)
+    {
+        Status = m_pQxlDod->AcquireDisplayInfo(DispInfo);
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("QxlDod::AcquireDisplayInfo failed with status 0x%X Width = %d\n",
+            Status, DispInfo.Width));
+        return STATUS_UNSUCCESSFUL;
+    }
+    PhysicAddress.QuadPart = DispInfo.PhysicAddress.QuadPart;
+
+    if (DispInfo.Width == 0)
+    {
+        DispInfo.Width = MIN_WIDTH_SIZE;
+        DispInfo.Height = MIN_HEIGHT_SIZE;
+        DispInfo.Pitch = BPPFromPixelFormat(D3DDDIFMT_R8G8B8) / 8;
+        DispInfo.ColorFormat = D3DDDIFMT_R8G8B8;
+        DispInfo.TargetId = 0;
+        if (PhysicAddress.QuadPart != 0L)
+        {
+            DispInfo.PhysicAddress.QuadPart = PhysicAddress.QuadPart;
+        }
+    }
+    return Status;
 }
