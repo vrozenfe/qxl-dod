@@ -2614,7 +2614,10 @@ NTSTATUS VgaDevice::SetPowerState(_In_  DEVICE_POWER_STATE DevicePowerState, DXG
     switch (DevicePowerState)
     {
         case PowerDeviceUnspecified: 
-        case PowerDeviceD0: regs.Ebx |= 0x1; break;
+        case PowerDeviceD0:
+            regs.Ebx |= 0x1;
+            AcquireDisplayInfo(*(pDispInfo));
+            break;
         case PowerDeviceD1:
         case PowerDeviceD2: 
         case PowerDeviceD3: regs.Ebx |= 0x400; break;
