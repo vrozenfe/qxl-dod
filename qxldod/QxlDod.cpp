@@ -4502,7 +4502,7 @@ NTSTATUS QxlDevice::SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pS
         QXLCursorCmd *cursor_cmd = CursorCmd();
         if (pSetPointerPosition->X < 0) {
            cursor_cmd->type = QXL_CURSOR_HIDE;
-    } else {
+        } else {
            cursor_cmd->type = QXL_CURSOR_MOVE;
            cursor_cmd->u.position.x = (INT16)pSetPointerPosition->X;
            cursor_cmd->u.position.y = (INT16)pSetPointerPosition->Y;
