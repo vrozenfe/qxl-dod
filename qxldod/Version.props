@@ -1,0 +1,33 @@
+<!--
+***********************************************************************************************
+Version.props
+Version definitions used by the driver.
+***********************************************************************************************
+-->
+
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" TreatAsLocalProperty="Platform">
+  <PropertyGroup>
+    <!-- First component of driver version -->
+    <VERSION_V1 Condition="'$(VERSION_V1)' == ''">100</VERSION_V1>
+    <!-- Second component of driver version -->
+    <VERSION_V2 Condition="'$(VERSION_V2)' == ''">0</VERSION_V2>
+    <!-- Third component of driver version -->
+    <VERSION_V3 Condition="'$(VERSION_V3)' == ''">0</VERSION_V3>
+    <!-- Fourth component of driver version -->
+    <VERSION_V4 Condition="'$(VERSION_V4)' == ''">13000</VERSION_V4>
+    <STAMPINF_VERSION>$(VERSION_V1).$(VERSION_V2).$(VERSION_V3).$(VERSION_V4)</STAMPINF_VERSION>
+  </PropertyGroup>
+
+  <!-- Version specs for C preprocessor, resource compiler, and stampinf -->
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions>VERSION_V3=$(VERSION_V3);VERSION_V4=$(VERSION_V4);VERSION_V1=$(VERSION_V1);VERSION_V2=$(VERSION_V2);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>VERSION_V3=$(VERSION_V3);VERSION_V4=$(VERSION_V4);VERSION_V1=$(VERSION_V1);VERSION_V2=$(VERSION_V2);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+    <Inf>
+      <TimeStamp>$(STAMPINF_VERSION)</TimeStamp>
+    </Inf>
+  </ItemDefinitionGroup>
+</Project>

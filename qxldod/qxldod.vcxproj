@@ -44,6 +44,7 @@
     <DriverType>WDM</DriverType>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <Import Project="$(MSBuildProjectDirectory)\Version.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win10Debug|Win32'" Label="Configuration">
     <TargetVersion>
     </TargetVersion>

@@ -2,11 +2,30 @@
 
 #include <ntverp.h>
 
+#undef VER_PRODUCTBUILD
+#undef VER_PRODUCTBUILD_QFE
+#undef VER_PRODUCTNAME_STR
+#undef VER_PRODUCTMAJORVERSION
+#undef VER_PRODUCTMINORVERSION
+#undef VER_COMPANYNAME_STR
+#undef VER_LEGALTRADEMARKS_STR
+#undef VER_LEGALCOPYRIGHT_STR
+
+#define VER_COMPANYNAME_STR         "Red Hat Inc."
+#define VER_LEGALTRADEMARKS_STR     ""
+#define VER_LEGALCOPYRIGHT_STR      "Copyright (C) 2008-2016 Red Hat Inc."
+
+#define VER_PRODUCTMAJORVERSION         VERSION_V1
+#define VER_PRODUCTMINORVERSION         VERSION_V2
+#define VER_PRODUCTBUILD                VERSION_V3
+#define VER_PRODUCTBUILD_QFE            VERSION_V4
+
 #define VER_FILETYPE                VFT_DRV
 #define VER_FILESUBTYPE             VFT2_DRV_DISPLAY
-#define VER_FILEDESCRIPTION_STR     "QQL WDDM DOD"
-#define VER_INTERNALNAME_STR        "qxlod.sys"
+#define VER_FILEDESCRIPTION_STR     "QXL WDDM DOD"
+#define VER_INTERNALNAME_STR        "qxldod.sys"
 #define VER_ORIGINALFILENAME_STR    "qxldod.sys"
+#define VER_PRODUCTNAME_STR         VER_FILEDESCRIPTION_STR
 
 #define VER_LANGNEUTRAL
 #include "common.ver"
