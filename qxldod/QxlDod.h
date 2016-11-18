@@ -245,7 +245,6 @@ public:
     USHORT GetModeNumber(USHORT idx) {return m_ModeNumbers[idx];}
     USHORT GetCurrentModeIndex(void) {return m_CurrentMode;}
     VOID SetCurrentModeIndex(USHORT idx) {m_CurrentMode = idx;}
-    virtual BOOLEAN EnablePointer(void) = 0;
     virtual NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
                                  _In_ UINT              DstBitPerPixel,
                                  _In_ BYTE*             SrcAddr,
@@ -289,7 +288,6 @@ public:
     NTSTATUS SetPowerState(DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWClose(void);
-    BOOLEAN EnablePointer(void) { return TRUE; }
     NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
                                  _In_ UINT              DstBitPerPixel,
                                  _In_ BYTE*             SrcAddr,
@@ -464,7 +462,6 @@ public:
     NTSTATUS SetPowerState(DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWClose(void);
-    BOOLEAN EnablePointer(void) { return FALSE; }
     NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
                     _In_ UINT              DstBitPerPixel,
                     _In_ BYTE*             SrcAddr,

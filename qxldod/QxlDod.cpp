@@ -406,12 +406,10 @@ NTSTATUS QxlDod::QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO* pQueryAda
             pDriverCaps->WDDMVersion = DXGKDDI_WDDMv1_2;
             pDriverCaps->HighestAcceptableAddress.QuadPart = -1;
 
-            if (m_pHWDevice->EnablePointer()) {
-                pDriverCaps->MaxPointerWidth  = POINTER_SIZE;
-                pDriverCaps->MaxPointerHeight = POINTER_SIZE;
-                pDriverCaps->PointerCaps.Monochrome = 1;
-                pDriverCaps->PointerCaps.Color = 1;
-            }
+            pDriverCaps->MaxPointerWidth  = POINTER_SIZE;
+            pDriverCaps->MaxPointerHeight = POINTER_SIZE;
+            pDriverCaps->PointerCaps.Monochrome = 1;
+            pDriverCaps->PointerCaps.Color = 1;
 
             pDriverCaps->SupportNonVGA = TRUE;
 
@@ -4428,7 +4426,7 @@ NTSTATUS  QxlDevice::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPoi
                                  pSetPointerShape->Height,
                                  pSetPointerShape->XHot,
                                  pSetPointerShape->YHot));
-    if (!EnablePointer() || (!pSetPointerShape->Flags.Monochrome && !pSetPointerShape->Flags.Color))
+    if (!pSetPointerShape->Flags.Monochrome && !pSetPointerShape->Flags.Color)
         return STATUS_UNSUCCESSFUL;
 
     QXLCursorCmd *cursor_cmd;
@@ -4508,17 +4506,15 @@ NTSTATUS QxlDevice::SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pS
                                  pSetPointerPosition->VidPnSourceId,
                                  pSetPointerPosition->X,
                                  pSetPointerPosition->Y));
-    if (EnablePointer()) {
-        QXLCursorCmd *cursor_cmd = CursorCmd();
-        if (pSetPointerPosition->X < 0) {
-           cursor_cmd->type = QXL_CURSOR_HIDE;
-        } else {
-           cursor_cmd->type = QXL_CURSOR_MOVE;
-           cursor_cmd->u.position.x = (INT16)pSetPointerPosition->X;
-           cursor_cmd->u.position.y = (INT16)pSetPointerPosition->Y;
-        }
-        PushCursorCmd(cursor_cmd);
+    QXLCursorCmd *cursor_cmd = CursorCmd();
+    if (pSetPointerPosition->X < 0) {
+        cursor_cmd->type = QXL_CURSOR_HIDE;
+    } else {
+        cursor_cmd->type = QXL_CURSOR_MOVE;
+        cursor_cmd->u.position.x = (INT16)pSetPointerPosition->X;
+        cursor_cmd->u.position.y = (INT16)pSetPointerPosition->Y;
     }
+    PushCursorCmd(cursor_cmd);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
 }
