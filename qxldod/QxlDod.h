@@ -487,6 +487,7 @@ protected:
                     UINT  NumRects,
                     _In_reads_(NumRects) CONST RECT *pRects,
                     POINT*   pSourcePoint);
+    void CopyBits(const RECT& rect, const POINT& sourcePoint);
     QXLDrawable *Drawable(UINT8 type,
                     CONST RECT *area,
                     CONST RECT *clip,

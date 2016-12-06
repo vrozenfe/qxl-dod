@@ -3738,11 +3738,7 @@ QxlDevice::ExecutePresentDisplayOnly(
         DbgPrint(TRACE_LEVEL_INFORMATION, ("--- %d SourcePoint.x = %ld, SourcePoint.y = %ld, DestRect.bottom = %ld, DestRect.left = %ld, DestRect.right = %ld, DestRect.top = %ld\n", 
             i , pSourcePoint->x, pSourcePoint->y, pDestRect->bottom, pDestRect->left, pDestRect->right, pDestRect->top));
 
-        BltBits(&DstBltInfo,
-        &SrcBltInfo,
-        1,
-        pDestRect,
-        pSourcePoint);
+        CopyBits(*pDestRect, *pSourcePoint);
     }
 
     // Copy all the dirty rects from source image to video frame buffer.
@@ -4182,6 +4178,26 @@ VOID QxlDevice::SetImageId(InternalImage *internal,
                          image_info, key);
         internal->image.descriptor.flags = 0;
     }
+}
+
+void QxlDevice::CopyBits(const RECT& rect, const POINT& sourcePoint)
+{
+    PAGED_CODE();
+    QXLDrawable *drawable;
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s device %d\n", __FUNCTION__,m_Id));
+
+    if (!(drawable = Drawable(QXL_COPY_BITS, &rect, NULL, 0))) {
+        DbgPrint(TRACE_LEVEL_ERROR, ("Cannot get Drawable.\n"));
+        return;
+    }
+
+    drawable->u.copy_bits.src_pos.x = sourcePoint.x;
+    drawable->u.copy_bits.src_pos.y = sourcePoint.y;
+
+    PushDrawable(drawable);
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
 VOID QxlDevice::BltBits (
