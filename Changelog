@@ -1,0 +1,9 @@
+Version 0.15
+    Implement screen to screen move correctly
+
+Version 0.14
+    Fix default mode pitch
+    Enable hardware pointer acceleration
+
+Version 0.13
+    Initial public release
