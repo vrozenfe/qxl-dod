@@ -411,7 +411,7 @@ NTSTATUS QxlDod::QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO* pQueryAda
             pDriverCaps->PointerCaps.Monochrome = 1;
             pDriverCaps->PointerCaps.Color = 1;
 
-            pDriverCaps->SupportNonVGA = TRUE;
+            pDriverCaps->SupportNonVGA = m_pHWDevice->IsBIOSCompatible();
 
             DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s 1\n", __FUNCTION__));
             return STATUS_SUCCESS;

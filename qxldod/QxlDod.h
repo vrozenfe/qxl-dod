@@ -263,6 +263,7 @@ public:
     virtual NTSTATUS Escape(_In_ CONST DXGKARG_ESCAPE* pEscap) = 0;
     NTSTATUS AcquireDisplayInfo(DXGK_DISPLAY_INFORMATION& DispInfo);
     ULONG GetId(void) { return m_Id; }
+    virtual BOOLEAN IsBIOSCompatible() { return TRUE; }
 protected:
     virtual NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
 protected:
@@ -480,6 +481,7 @@ public:
     NTSTATUS SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape);
     NTSTATUS SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition);
     NTSTATUS Escape(_In_ CONST DXGKARG_ESCAPE* pEscap);
+    BOOLEAN IsBIOSCompatible() { return FALSE; }
 protected:
     NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
     VOID BltBits (BLT_INFO* pDst,
