@@ -3638,7 +3638,7 @@ QxlDevice::ExecutePresentDisplayOnly(
     // Source bitmap is in user mode, must be locked under __try/__except
     // and mapped to kernel space before use.
     {
-        LONG maxHeight = GetMaxSourceMappingHeight(ctx->Moves, ctx->NumMoves, ctx->DirtyRect, ctx->NumDirtyRects);
+        LONG maxHeight = GetMaxSourceMappingHeight(ctx->DirtyRect, ctx->NumDirtyRects);
         UINT sizeToMap = ctx->SrcPitch * maxHeight;
 
         PMDL mdl = IoAllocateMdl((PVOID)SrcAddr, sizeToMap,  FALSE, FALSE, NULL);
@@ -4533,17 +4533,10 @@ void QxlDevice::SetMonitorConfig(QXLHead * monitor_config)
     AsyncIo(QXL_IO_MONITORS_CONFIG_ASYNC, 0);
 }
 
-LONG QxlDevice::GetMaxSourceMappingHeight(D3DKMT_MOVE_RECT* Moves, ULONG NumMoves, RECT* DirtyRects, ULONG NumDirtyRects)
+LONG QxlDevice::GetMaxSourceMappingHeight(RECT* DirtyRects, ULONG NumDirtyRects)
 {
     PAGED_CODE();
     LONG maxHeight = 0;
-    if (Moves != NULL) {
-        for (UINT i = 0; i < NumMoves; i++) {
-            const POINT&   pSourcePoint = Moves[i].SourcePoint;
-            const RECT&    pDestRect = Moves[i].DestRect;
-            maxHeight = MAX(maxHeight, pDestRect.bottom - pDestRect.top + pSourcePoint.y);
-        }
-    }
     if (DirtyRects != NULL) {
         for (UINT i = 0; i < NumDirtyRects; i++) {
             const RECT&    pDirtyRect = DirtyRects[i];

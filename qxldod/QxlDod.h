@@ -555,7 +555,7 @@ private:
     NTSTATUS SetCustomDisplay(QXLEscapeSetCustomDisplay* custom_display);
     void SetMonitorConfig(QXLHead* monitor_config);
 
-    static LONG GetMaxSourceMappingHeight(D3DKMT_MOVE_RECT* Moves, ULONG NumMoves, RECT* DirtyRects, ULONG NumDirtyRects);
+    static LONG GetMaxSourceMappingHeight(RECT* DirtyRects, ULONG NumDirtyRects);
 
 private:
     PUCHAR m_IoBase;
