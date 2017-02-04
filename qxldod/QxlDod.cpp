@@ -4797,7 +4797,7 @@ NTSTATUS HwDeviceInterface::AcquireDisplayInfo(DXGK_DISPLAY_INFORMATION& DispInf
 
     if (DispInfo.Width == 0)
     {
-        DispInfo.ColorFormat = D3DDDIFMT_R8G8B8;
+        DispInfo.ColorFormat = D3DDDIFMT_A8R8G8B8;
         DispInfo.Width = MIN_WIDTH_SIZE;
         DispInfo.Height = MIN_HEIGHT_SIZE;
         DispInfo.Pitch = DispInfo.Width * BPPFromPixelFormat(DispInfo.ColorFormat) / BITS_PER_BYTE;
