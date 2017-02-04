@@ -4783,7 +4783,6 @@ UINT SpiceFromPixelFormat(D3DDDIFORMAT Format)
 NTSTATUS HwDeviceInterface::AcquireDisplayInfo(DXGK_DISPLAY_INFORMATION& DispInfo)
 {
     NTSTATUS Status = STATUS_SUCCESS;
-    PHYSICAL_ADDRESS PhysicAddress;
     if (GetId() == 0)
     {
         Status = m_pQxlDod->AcquireDisplayInfo(DispInfo);
@@ -4795,7 +4794,6 @@ NTSTATUS HwDeviceInterface::AcquireDisplayInfo(DXGK_DISPLAY_INFORMATION& DispInf
             Status, DispInfo.Width));
         return STATUS_UNSUCCESSFUL;
     }
-    PhysicAddress.QuadPart = DispInfo.PhysicAddress.QuadPart;
 
     if (DispInfo.Width == 0)
     {
@@ -4804,10 +4802,6 @@ NTSTATUS HwDeviceInterface::AcquireDisplayInfo(DXGK_DISPLAY_INFORMATION& DispInf
         DispInfo.Pitch = MIN_WIDTH_SIZE * BPPFromPixelFormat(D3DDDIFMT_R8G8B8) / 8;
         DispInfo.ColorFormat = D3DDDIFMT_R8G8B8;
         DispInfo.TargetId = 0;
-        if (PhysicAddress.QuadPart != 0L)
-        {
-            DispInfo.PhysicAddress.QuadPart = PhysicAddress.QuadPart;
-        }
     }
     return Status;
 }
