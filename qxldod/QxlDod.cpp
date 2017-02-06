@@ -2534,6 +2534,26 @@ NTSTATUS VgaDevice::GetCurrentMode(ULONG* pMode)
     return Status;
 }
 
+static LONGLONG GetVgaFrameBuffer(const CM_RESOURCE_LIST& resList)
+{
+    PAGED_CODE();
+    for (ULONG i = 0; i < resList.Count; ++i)
+    {
+        const CM_PARTIAL_RESOURCE_DESCRIPTOR *prd = resList.List[i].PartialResourceList.PartialDescriptors;
+        for (ULONG j = 0; j < resList.List[i].PartialResourceList.Count; ++j)
+        {
+            if (prd[j].Type == CmResourceTypeMemory)
+            {
+                // bar 0 is VGA area
+                DbgPrint(TRACE_LEVEL_INFORMATION, ("%s: found %I64x\n", __FUNCTION__, prd[j].u.Memory.Start.QuadPart));
+                return prd[j].u.Memory.Start.QuadPart;
+            }
+        }
+    }
+    DbgPrint(TRACE_LEVEL_ERROR, ("%s: not found in resources\n", __FUNCTION__));
+    return 0;
+}
+
 NTSTATUS VgaDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo)
 {
     PAGED_CODE();
@@ -2541,6 +2561,13 @@ NTSTATUS VgaDevice::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION*
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     UNREFERENCED_PARAMETER(pResList);
     AcquireDisplayInfo(*(pDispInfo));
+    // it is possible that the OS does not have current display information
+    // in this case the driver uses defaults, but physical address
+    // is still not initialized
+    if (!pDispInfo->PhysicAddress.QuadPart)
+    {
+        pDispInfo->PhysicAddress.QuadPart = GetVgaFrameBuffer(*pResList);
+    }
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return GetModeList(pDispInfo);
 }
