@@ -239,6 +239,7 @@ public:
     QXL_NON_PAGED virtual BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber) = 0;
     QXL_NON_PAGED virtual VOID DpcRoutine(PVOID) = 0;
     QXL_NON_PAGED virtual VOID ResetDevice(void) = 0;
+    QXL_NON_PAGED virtual VOID VSyncInterruptPostProcess(_In_ PDXGKRNL_INTERFACE) = 0;
     virtual NTSTATUS AcquireFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode) { return STATUS_SUCCESS; }
     virtual NTSTATUS ReleaseFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode) { return STATUS_SUCCESS; }
 
@@ -306,6 +307,7 @@ public:
     QXL_NON_PAGED BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
     QXL_NON_PAGED VOID DpcRoutine(PVOID);
     QXL_NON_PAGED VOID ResetDevice(VOID);
+    QXL_NON_PAGED VOID VSyncInterruptPostProcess(_In_ PDXGKRNL_INTERFACE);
     NTSTATUS AcquireFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode);
     NTSTATUS ReleaseFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode);
     NTSTATUS SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape);
@@ -358,8 +360,10 @@ enum {
 
 #ifdef DBG
 #define RESOURCE_TYPE(res, val) do { res->type = val; } while (0)
+#define INCREMENT_VSYNC_COUNTER(counter) InterlockedIncrement(counter)
 #else
 #define RESOURCE_TYPE(res, val)
+#define INCREMENT_VSYNC_COUNTER(counter)
 #endif
 
 typedef struct Resource Resource;
@@ -480,6 +484,7 @@ public:
     QXL_NON_PAGED BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
     QXL_NON_PAGED VOID DpcRoutine(PVOID);
     QXL_NON_PAGED VOID ResetDevice(VOID);
+    QXL_NON_PAGED VOID VSyncInterruptPostProcess(_In_ PDXGKRNL_INTERFACE);
     NTSTATUS SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape);
     NTSTATUS SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition);
     NTSTATUS Escape(_In_ CONST DXGKARG_ESCAPE* pEscap);
@@ -622,6 +627,10 @@ private:
     DXGKARG_SETPOINTERSHAPE m_PointerShape;
 
     HwDeviceInterface* m_pHWDevice;
+    KTIMER m_VsyncTimer;
+    KDPC   m_VsyncTimerDpc;
+    BOOLEAN m_bVsyncEnabled;
+    LONG m_VsyncFiredCounter;
 public:
     QxlDod(_In_ DEVICE_OBJECT* pPhysicalDeviceObject);
     ~QxlDod(void);
@@ -719,6 +728,7 @@ public:
     {
         return m_DxgkInterface.DxgkCbAcquirePostDisplayOwnership(m_DxgkInterface.DeviceHandle, &DispInfo);
     }
+    VOID EnableVsync(BOOLEAN bEnable);
 private:
     VOID CleanUp(VOID);
     NTSTATUS CheckHardware();
@@ -744,6 +754,10 @@ private:
     NTSTATUS IsVidPnSourceModeFieldsValid(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMode) const;
     NTSTATUS IsVidPnPathFieldsValid(CONST D3DKMDT_VIDPN_PRESENT_PATH* pPath) const;
     NTSTATUS RegisterHWInfo(_In_ ULONG Id);
+    QXL_NON_PAGED VOID VsyncTimerProc();
+    static QXL_NON_PAGED VOID VsyncTimerProcGate(_In_ _KDPC *dpc, _In_ PVOID context, _In_ PVOID arg1, _In_ PVOID arg2);
+    QXL_NON_PAGED VOID IndicateVSyncInterrupt();
+    static QXL_NON_PAGED BOOLEAN VsyncTimerSynchRoutine(PVOID context);
 };
 
 NTSTATUS

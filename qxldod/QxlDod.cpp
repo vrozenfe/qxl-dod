@@ -82,6 +82,12 @@ QxlDod::QxlDod(_In_ DEVICE_OBJECT* pPhysicalDeviceObject) : m_pPhysicalDevice(pP
     RtlZeroMemory(m_CurrentModes, sizeof(m_CurrentModes));
     RtlZeroMemory(&m_PointerShape, sizeof(m_PointerShape));
     m_pHWDevice = NULL;
+
+    KeInitializeDpc(&m_VsyncTimerDpc, VsyncTimerProcGate, this);
+    KeInitializeTimer(&m_VsyncTimer);
+    m_VsyncFiredCounter = 0;
+    m_bVsyncEnabled = FALSE;
+
     DbgPrint(TRACE_LEVEL_INFORMATION, ("<--- %s\n", __FUNCTION__));
 }
 
@@ -198,6 +204,7 @@ NTSTATUS QxlDod::StopDevice(VOID)
 {
     PAGED_CODE();
     m_Flags.DriverStarted = FALSE;
+    EnableVsync(FALSE);
     return STATUS_SUCCESS;
 }
 
@@ -518,6 +525,7 @@ NTSTATUS QxlDod::QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO* pQueryAda
             pDriverCaps->PointerCaps.Color = 1;
 
             pDriverCaps->SupportNonVGA = m_pHWDevice->IsBIOSCompatible();
+            pDriverCaps->SchedulingCaps.VSyncPowerSaveAware = g_bSupportVSync;
 
             DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s 1\n", __FUNCTION__));
             return STATUS_SUCCESS;
@@ -4813,6 +4821,14 @@ BOOLEAN QxlDevice::InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_
 }
 
 QXL_NON_PAGED
+VOID QxlDevice::VSyncInterruptPostProcess(_In_ PDXGKRNL_INTERFACE pDxgkInterface)
+{
+    if (!pDxgkInterface->DxgkCbQueueDpc(pDxgkInterface->DeviceHandle)) {
+        DbgPrint(TRACE_LEVEL_WARNING, ("---> %s can't enqueue DPC, pending interrupts %X\n", __FUNCTION__, m_Pending));
+    }
+}
+
+QXL_NON_PAGED
 VOID QxlDevice::DpcRoutine(PVOID)
 {
     LONG intStatus = InterlockedExchange(&m_Pending, 0);
@@ -4913,4 +4929,70 @@ NTSTATUS HwDeviceInterface::AcquireDisplayInfo(DXGK_DISPLAY_INFORMATION& DispInf
         DispInfo.TargetId = 0;
     }
     return Status;
+}
+
+// Vga device does not generate interrupts
+QXL_NON_PAGED VOID VgaDevice::VSyncInterruptPostProcess(_In_ PDXGKRNL_INTERFACE pxface)
+{
+    pxface->DxgkCbQueueDpc(pxface->DeviceHandle);
+}
+
+QXL_NON_PAGED VOID QxlDod::IndicateVSyncInterrupt()
+{
+    DXGKARGCB_NOTIFY_INTERRUPT_DATA data = {};
+    data.InterruptType = DXGK_INTERRUPT_DISPLAYONLY_VSYNC;
+    m_DxgkInterface.DxgkCbNotifyInterrupt(m_DxgkInterface.DeviceHandle, &data);
+    m_pHWDevice->VSyncInterruptPostProcess(&m_DxgkInterface);
+}
+
+QXL_NON_PAGED BOOLEAN QxlDod::VsyncTimerSynchRoutine(PVOID context)
+{
+    QxlDod* pQxl = reinterpret_cast<QxlDod*>(context);
+    pQxl->IndicateVSyncInterrupt();
+    return FALSE;
+}
+
+QXL_NON_PAGED VOID QxlDod::VsyncTimerProc()
+{
+    BOOLEAN bDummy;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+    if (m_bVsyncEnabled && m_AdapterPowerState == PowerDeviceD0)
+    {
+        m_DxgkInterface.DxgkCbSynchronizeExecution(
+            m_DxgkInterface.DeviceHandle,
+            VsyncTimerSynchRoutine,
+            this,
+            0,
+            &bDummy
+        );
+        INCREMENT_VSYNC_COUNTER(&m_VsyncFiredCounter);
+    }
+}
+
+VOID QxlDod::EnableVsync(BOOLEAN bEnable)
+{
+    PAGED_CODE();
+    if (g_bSupportVSync)
+    {
+        m_bVsyncEnabled = bEnable;
+        if (!m_bVsyncEnabled)
+        {
+            DbgPrint(TRACE_LEVEL_WARNING, ("Disabled VSync(fired %d)\n", InterlockedExchange(&m_VsyncFiredCounter, 0)));
+            KeCancelTimer(&m_VsyncTimer);
+        }
+        else
+        {
+            LARGE_INTEGER li;
+            LONG period = 1000 / VSYNC_RATE;
+            DbgPrint(TRACE_LEVEL_WARNING, ("Enabled VSync(fired %d)\n", m_VsyncFiredCounter));
+            li.QuadPart = -10000000 / VSYNC_RATE;
+            KeSetTimerEx(&m_VsyncTimer, li, period, &m_VsyncTimerDpc);
+        }
+    }
+}
+
+QXL_NON_PAGED VOID QxlDod::VsyncTimerProcGate(_In_ _KDPC *dpc, _In_ PVOID context, _In_ PVOID arg1, _In_ PVOID arg2)
+{
+    QxlDod* pQxl = reinterpret_cast<QxlDod*>(context);
+    pQxl->VsyncTimerProc();
 }
