@@ -549,8 +549,6 @@ private:
     void PutBytesAlign(QXLDataChunk **chunk_ptr, UINT8 **now_ptr,
                             UINT8 **end_ptr, UINT8 *src, int size,
                             size_t alloc_size, uint32_t alignment);
-    QXL_NON_PAGED BOOLEAN static DpcCallbackEx(PVOID);
-    QXL_NON_PAGED void DpcCallback(PDPC_CB_CONTEXT);
     void AsyncIo(UCHAR  Port, UCHAR Value);
     void SyncIo(UCHAR  Port, UCHAR Value);
     NTSTATUS UpdateChildStatus(BOOLEAN connect);
@@ -602,7 +600,7 @@ private:
     MspaceInfo m_MSInfo[NUM_MSPACES];
 
     UINT64 m_FreeOutputs;
-    UINT32 m_Pending;
+    LONG m_Pending;
 
     QXLMonitorsConfig* m_monitor_config;
     QXLPHYSICAL* m_monitor_config_pa;
