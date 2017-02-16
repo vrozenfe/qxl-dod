@@ -26,6 +26,8 @@
 
 #define QXL_NON_PAGED __declspec(code_seg(".text"))
 
+extern BOOLEAN g_bSupportVSync;
+
 typedef struct _QXL_FLAGS
 {
     UINT DriverStarted           : 1; // ( 1) 1 after StartDevice and 0 after StopDevice

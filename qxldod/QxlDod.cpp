@@ -19,6 +19,10 @@
                           (QXL_INTERRUPT_CURSOR) | \
                           (QXL_INTERRUPT_IO_CMD))
 
+#define VSYNC_RATE      75
+
+BOOLEAN g_bSupportVSync;
+
 // BEGIN: Non-Paged Code
 
 // Bit is 1 from Idx to end of byte, with bit count starting at high order
@@ -826,6 +830,39 @@ NTSTATUS QxlDod::AddSingleSourceMode(_In_ CONST DXGK_VIDPNSOURCEMODESET_INTERFAC
     return STATUS_SUCCESS;
 }
 
+static VOID FillSignalInfo(D3DKMDT_VIDEO_SIGNAL_INFO& SignalInfo, const VIDEO_MODE_INFORMATION *pVideoModeInfo, LPCSTR caller)
+{
+    PAGED_CODE();
+    SignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
+    SignalInfo.TotalSize.cx = pVideoModeInfo->VisScreenWidth;
+    SignalInfo.TotalSize.cy = pVideoModeInfo->VisScreenHeight;
+    SignalInfo.ActiveSize = SignalInfo.TotalSize;
+    if (g_bSupportVSync)
+    {
+        UINT val;
+        SignalInfo.VSyncFreq.Numerator = VSYNC_RATE;
+        SignalInfo.VSyncFreq.Denominator = 1;
+        val =
+            SignalInfo.VSyncFreq.Numerator *
+            pVideoModeInfo->VisScreenWidth *
+            pVideoModeInfo->VisScreenHeight;
+        SignalInfo.PixelRate = val;
+        SignalInfo.HSyncFreq.Numerator = val / pVideoModeInfo->VisScreenHeight;
+        SignalInfo.HSyncFreq.Denominator = 1;
+        DbgPrint(TRACE_LEVEL_INFORMATION, ("by %s: filling with frequency data for %dx%d\n", caller, pVideoModeInfo->VisScreenWidth, pVideoModeInfo->VisScreenHeight));
+    }
+    else
+    {
+        SignalInfo.VSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
+        SignalInfo.VSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
+        SignalInfo.HSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
+        SignalInfo.HSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
+        SignalInfo.PixelRate = D3DKMDT_FREQUENCY_NOTSPECIFIED;
+        DbgPrint(TRACE_LEVEL_INFORMATION, ("by %s: filling without frequency data for %dx%d\n", caller, pVideoModeInfo->VisScreenWidth, pVideoModeInfo->VisScreenHeight));
+    }
+    SignalInfo.ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
+}
+
 // Add the current mode information (acquired from the POST frame buffer) as the target mode.
 NTSTATUS QxlDod::AddSingleTargetMode(_In_ CONST DXGK_VIDPNTARGETMODESET_INTERFACE* pVidPnTargetModeSetInterface,
                                                    D3DKMDT_HVIDPNTARGETMODESET hVidPnTargetModeSet,
@@ -849,16 +886,8 @@ NTSTATUS QxlDod::AddSingleTargetMode(_In_ CONST DXGK_VIDPNTARGETMODESET_INTERFAC
             DbgPrint(TRACE_LEVEL_ERROR, ("pfnCreateNewModeInfo failed with Status = 0x%X, hVidPnTargetModeSet = 0x%I64x", Status, hVidPnTargetModeSet));
             return Status;
         }
-        pVidPnTargetModeInfo->VideoSignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
-        pVidPnTargetModeInfo->VideoSignalInfo.TotalSize.cx = pModeInfo->VisScreenWidth;
-        pVidPnTargetModeInfo->VideoSignalInfo.TotalSize.cy = pModeInfo->VisScreenHeight;
-        pVidPnTargetModeInfo->VideoSignalInfo.ActiveSize = pVidPnTargetModeInfo->VideoSignalInfo.TotalSize;
-        pVidPnTargetModeInfo->VideoSignalInfo.VSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-        pVidPnTargetModeInfo->VideoSignalInfo.VSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-        pVidPnTargetModeInfo->VideoSignalInfo.HSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-        pVidPnTargetModeInfo->VideoSignalInfo.HSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-        pVidPnTargetModeInfo->VideoSignalInfo.PixelRate = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-        pVidPnTargetModeInfo->VideoSignalInfo.ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
+        FillSignalInfo(pVidPnTargetModeInfo->VideoSignalInfo, pModeInfo, __FUNCTION__);
+
     // We add this as PREFERRED since it is the only supported target
         pVidPnTargetModeInfo->Preference = D3DKMDT_MP_NOTPREFERRED; // TODO: another logic for prefferred mode. Maybe the pinned source mode
 
@@ -900,16 +929,7 @@ NTSTATUS QxlDod::AddSingleMonitorMode(_In_ CONST DXGKARG_RECOMMENDMONITORMODES* 
     pVbeModeInfo = m_pHWDevice->GetModeInfo(m_pHWDevice->GetCurrentModeIndex());
 
     // Since we don't know the real monitor timing information, just use the current display mode (from the POST device) with unknown frequencies
-    pMonitorSourceMode->VideoSignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
-    pMonitorSourceMode->VideoSignalInfo.TotalSize.cx = pVbeModeInfo->VisScreenWidth;
-    pMonitorSourceMode->VideoSignalInfo.TotalSize.cy = pVbeModeInfo->VisScreenHeight;
-    pMonitorSourceMode->VideoSignalInfo.ActiveSize = pMonitorSourceMode->VideoSignalInfo.TotalSize;
-    pMonitorSourceMode->VideoSignalInfo.VSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-    pMonitorSourceMode->VideoSignalInfo.VSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-    pMonitorSourceMode->VideoSignalInfo.HSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-    pMonitorSourceMode->VideoSignalInfo.HSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-    pMonitorSourceMode->VideoSignalInfo.PixelRate = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-    pMonitorSourceMode->VideoSignalInfo.ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
+    FillSignalInfo(pMonitorSourceMode->VideoSignalInfo, pVbeModeInfo, __FUNCTION__);
 
     // We set the preference to PREFERRED since this is the only supported mode
     pMonitorSourceMode->Origin = D3DKMDT_MCO_DRIVER;
@@ -960,16 +980,7 @@ NTSTATUS QxlDod::AddSingleMonitorMode(_In_ CONST DXGKARG_RECOMMENDMONITORMODES* 
                    pVbeModeInfo->VisScreenWidth, pVbeModeInfo->VisScreenHeight));
 
         // Since we don't know the real monitor timing information, just use the current display mode (from the POST device) with unknown frequencies
-        pMonitorSourceMode->VideoSignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
-        pMonitorSourceMode->VideoSignalInfo.TotalSize.cx = pVbeModeInfo->VisScreenWidth;
-        pMonitorSourceMode->VideoSignalInfo.TotalSize.cy = pVbeModeInfo->VisScreenHeight;
-        pMonitorSourceMode->VideoSignalInfo.ActiveSize = pMonitorSourceMode->VideoSignalInfo.TotalSize;
-        pMonitorSourceMode->VideoSignalInfo.VSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-        pMonitorSourceMode->VideoSignalInfo.VSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-        pMonitorSourceMode->VideoSignalInfo.HSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-        pMonitorSourceMode->VideoSignalInfo.HSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-        pMonitorSourceMode->VideoSignalInfo.PixelRate = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-        pMonitorSourceMode->VideoSignalInfo.ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
+        FillSignalInfo(pMonitorSourceMode->VideoSignalInfo, pVbeModeInfo, __FUNCTION__);
 
         pMonitorSourceMode->Origin = D3DKMDT_MCO_DRIVER;
         pMonitorSourceMode->Preference = D3DKMDT_MP_NOTPREFERRED;
