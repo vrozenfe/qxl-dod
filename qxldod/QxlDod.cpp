@@ -2560,8 +2560,8 @@ NTSTATUS VgaDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
 
         DbgPrint(TRACE_LEVEL_INFORMATION, ("ModeTemp = 0x%X %dx%d@%d\n", ModeTemp, tmpModeInfo.XResolution, tmpModeInfo.YResolution, tmpModeInfo.BitsPerPixel));
 
-        if (tmpModeInfo.XResolution >= Width &&
-            tmpModeInfo.YResolution >= Height &&
+        if (tmpModeInfo.XResolution >= MIN_WIDTH_SIZE &&
+            tmpModeInfo.YResolution >= MIN_HEIGHT_SIZE &&
             tmpModeInfo.BitsPerPixel == BitsPerPixel &&
             tmpModeInfo.PhysBasePtr != 0)
         {
@@ -3186,8 +3186,8 @@ NTSTATUS QxlDevice::GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo)
 
         DbgPrint(TRACE_LEVEL_INFORMATION, ("%s: modes[%d] x_res = %d, y_res = %d, bits = %d BitsPerPixel = %d\n", __FUNCTION__, CurrentMode, tmpModeInfo->x_res, tmpModeInfo->y_res, tmpModeInfo->bits, BitsPerPixel));
 
-        if (tmpModeInfo->x_res >= Width &&
-            tmpModeInfo->y_res >= Height &&
+        if (tmpModeInfo->x_res >= MIN_WIDTH_SIZE &&
+            tmpModeInfo->y_res >= MIN_HEIGHT_SIZE &&
             tmpModeInfo->bits == QXL_BPP)
         {
             m_ModeNumbers[SuitableModeCount] = SuitableModeCount;
