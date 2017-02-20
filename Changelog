@@ -1,3 +1,8 @@
+Version 0.16
+    Fix black screen when disabled driver for device rev.4
+    Fix black screen when enabled driver for device rev.3
+    Optimization of source buffer mapping for move operation
+
 Version 0.15
     Implement screen to screen move correctly
 
