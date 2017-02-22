@@ -32,6 +32,31 @@ DriverEntry(
 
     DbgPrint(TRACE_LEVEL_FATAL, ("---> KMDOD build on on %s %s\n", __DATE__, __TIME__));
 
+    RTL_OSVERSIONINFOW versionInfo;
+    versionInfo.dwOSVersionInfoSize = sizeof(versionInfo);
+
+    RtlGetVersion(&versionInfo);
+
+    // VSync control is NOT planned to be enabled on Win10 builds
+    // before RS1. Enabling it on DOD driver causes OS to stop the driver
+    // with error 43 when the system turns off display due to idle setting.
+    // On Windows 8.1 (9200 and 9600) till now no problem observed
+    // (OS does not send VSync enable command)
+    // On Windows 10RS1 (14393) enabling VSync control activates
+    // watchdog policy and creates high sensitivity to long (> 2 sec)
+    // processing in PresentDisplayOnly callback (stop with error 43)
+
+    if (versionInfo.dwBuildNumber >= 14393 || versionInfo.dwBuildNumber <= 9600)
+    {
+        // we will uncomment the line below after we address all the problems
+        // related to enabled VSync control in Win10RS1
+
+        //g_bSupportVSync = TRUE;
+    }
+    DbgPrint(TRACE_LEVEL_WARNING, ("VSync support %sabled for %d.%d.%d\n",
+        g_bSupportVSync ? "en" : "dis",
+        versionInfo.dwMajorVersion, versionInfo.dwMinorVersion, versionInfo.dwBuildNumber));
+
     // Initialize DDI function pointers and dxgkrnl
     KMDDOD_INITIALIZATION_DATA InitialData = {0};
 
@@ -67,6 +92,11 @@ DriverEntry(
     InitialData.DxgkDdiStopDeviceAndReleasePostDisplayOwnership = DodStopDeviceAndReleasePostDisplayOwnership;
     InitialData.DxgkDdiSystemDisplayEnable          = DodSystemDisplayEnable;
     InitialData.DxgkDdiSystemDisplayWrite           = DodSystemDisplayWrite;
+    if (g_bSupportVSync)
+    {
+        InitialData.DxgkDdiControlInterrupt = DodControlInterrupt;
+        InitialData.DxgkDdiGetScanLine = DodGetScanLine;
+    }
 
     NTSTATUS Status = DxgkInitializeDisplayOnlyDriver(pDriverObject, pRegistryPath, &InitialData);
     if (!NT_SUCCESS(Status))
@@ -557,6 +587,40 @@ DodQueryVidPnHWCapability(
         return STATUS_UNSUCCESSFUL;
     }
     return pQxl->QueryVidPnHWCapability(pVidPnHWCaps);
+}
+
+NTSTATUS
+APIENTRY
+DodControlInterrupt(
+    IN_CONST_HANDLE                 hAdapter,
+    IN_CONST_DXGK_INTERRUPT_TYPE    InterruptType,
+    IN_BOOLEAN                      EnableInterrupt
+)
+{
+    PAGED_CODE();
+    QxlDod* pQxl = reinterpret_cast<QxlDod*>(hAdapter);
+    if (InterruptType == DXGK_INTERRUPT_DISPLAYONLY_VSYNC)
+    {
+        pQxl->EnableVsync(EnableInterrupt);
+        return STATUS_SUCCESS;
+    }
+    return  STATUS_NOT_IMPLEMENTED;
+}
+
+NTSTATUS
+APIENTRY
+DodGetScanLine(
+    IN_CONST_HANDLE             hAdapter,
+    INOUT_PDXGKARG_GETSCANLINE  pGetScanLine
+)
+{
+    PAGED_CODE();
+    // Currently we do not see any practical use case when this procedure is called
+    // IDirectDraw has an interface for querying scan line
+    // Leave it not implemented like remote desktop does
+    // until we recognize use case for more intelligent implementation
+    DbgPrint(TRACE_LEVEL_ERROR, ("<---> %s\n", __FUNCTION__));
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 //END: Paged Code

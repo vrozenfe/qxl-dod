@@ -217,6 +217,21 @@ DodSystemDisplayWrite(
     _In_  UINT  PositionX,
     _In_  UINT  PositionY);
 
+NTSTATUS
+APIENTRY
+DodControlInterrupt(
+    IN_CONST_HANDLE                 hAdapter,
+    IN_CONST_DXGK_INTERRUPT_TYPE    InterruptType,
+    IN_BOOLEAN                      EnableInterrupt
+);
+
+NTSTATUS
+APIENTRY
+DodGetScanLine(
+    IN_CONST_HANDLE             hAdapter,
+    INOUT_PDXGKARG_GETSCANLINE  pGetScanLine
+);
+
 #if DBG
 
 extern int nDebugLevel;
