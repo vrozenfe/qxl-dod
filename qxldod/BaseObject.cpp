@@ -1,3 +1,13 @@
+/*
+ * Copyright 2013-2016 Red Hat, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
+
 #include "BaseObject.h"
 
 #pragma code_seg("PAGE")
@@ -67,6 +77,17 @@ void __cdecl operator delete[](void* pObject)
 
     if (pObject != NULL)
     {
+        ExFreePool(pObject);
+    }
+}
+
+void __cdecl operator delete(void *pObject, size_t s)
+{
+    PAGED_CODE();
+
+    UNREFERENCED_PARAMETER(s);
+
+    if (pObject != NULL) {
         ExFreePool(pObject);
     }
 }

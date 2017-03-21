@@ -1,12 +1,10 @@
 @echo off
 
-call %~dp0\checkWin8Tools.bat
-
-for /f "tokens=*" %%a in ( 
-'cscript.exe /nologo "%~dp0\getVisualStudioCmdLine.vbs" %*'
-) do ( 
-set vs_cmd=%%a 
-) 
+for /f "tokens=*" %%a in (
+'cscript.exe /nologo "%~dp0\vs_cmdline.vbs" %*'
+) do (
+SET vs_cmd=%%a
+)
 
 IF NOT DEFINED vs_cmd (
 echo Visual Studio not found
@@ -19,10 +17,10 @@ echo Visual Studio not found
 EXIT /b 2
 )
 
-call %vs_cmd%
+%vs_cmd%
 if %ERRORLEVEL% GEQ 1 (
 echo Build with Visual Studio FAILED
-exit /b %ERRORLEVEL%
+EXIT /b 3
 )
 
-exit /b 0
+EXIT /b 0

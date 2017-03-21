@@ -1,3 +1,13 @@
+/*
+ * Copyright 2013-2016 Red Hat, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
+
 #pragma once
 extern "C"
 {
@@ -56,4 +66,5 @@ _When_((PoolType & NonPagedPoolMustSucceed) != 0,
             "Allocation failures cause a system crash"))
 void* __cdecl operator new[](size_t Size, POOL_TYPE PoolType = PagedPool);
 void  __cdecl operator delete(void* pObject);
+void  __cdecl operator delete(void *pObject, size_t s);
 void  __cdecl operator delete[](void* pObject);

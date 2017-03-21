@@ -1,0 +1,14 @@
+Version 0.16
+    Fix black screen when disabled driver for device rev.4
+    Fix black screen when enabled driver for device rev.3
+    Optimization of source buffer mapping for move operation
+
+Version 0.15
+    Implement screen to screen move correctly
+
+Version 0.14
+    Fix default mode pitch
+    Enable hardware pointer acceleration
+
+Version 0.13
+    Initial public release

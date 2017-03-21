@@ -1,6 +1,17 @@
+/*
+ * Copyright 2013-2016 Red Hat, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
+
 #pragma once
 #include "baseobject.h"
 #include "qxl_dev.h"
+#include "qxl_windows.h"
 #include "mspace.h"
 
 #define MAX_CHILDREN               1
@@ -12,6 +23,10 @@
 #define MIN_HEIGHT_SIZE            768
 #define QXL_BPP                    32
 #define VGA_BPP                    24
+
+#define QXL_NON_PAGED __declspec(code_seg(".text"))
+
+extern BOOLEAN g_bSupportVSync;
 
 typedef struct _QXL_FLAGS
 {
@@ -106,7 +121,7 @@ typedef struct
 
 #pragma pack(pop)
 
-typedef struct _X86BIOS_REGISTERS	// invented names
+typedef struct _X86BIOS_REGISTERS    // invented names
 {
     ULONG Eax;
     ULONG Ecx;
@@ -212,25 +227,27 @@ typedef struct _CURRENT_BDD_MODE
 
 class QxlDod;
 
-class HwDeviceIntrface {
+class HwDeviceInterface {
 public:
-    virtual ~HwDeviceIntrface() {;}
+    virtual ~HwDeviceInterface() {;}
     virtual NTSTATUS QueryCurrentMode(PVIDEO_MODE RequestedMode) = 0;
     virtual NTSTATUS SetCurrentMode(ULONG Mode) = 0;
     virtual NTSTATUS GetCurrentMode(ULONG* Mode) = 0;
     virtual NTSTATUS SetPowerState(DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
     virtual NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
     virtual NTSTATUS HWClose(void) = 0;
-    virtual BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber) = 0;
-    virtual VOID DpcRoutine(PVOID) = 0;
-    virtual VOID ResetDevice(void) = 0;
+    QXL_NON_PAGED virtual BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber) = 0;
+    QXL_NON_PAGED virtual VOID DpcRoutine(PVOID) = 0;
+    QXL_NON_PAGED virtual VOID ResetDevice(void) = 0;
+    QXL_NON_PAGED virtual VOID VSyncInterruptPostProcess(_In_ PDXGKRNL_INTERFACE) = 0;
+    virtual NTSTATUS AcquireFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode) { return STATUS_SUCCESS; }
+    virtual NTSTATUS ReleaseFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode) { return STATUS_SUCCESS; }
 
     virtual ULONG GetModeCount(void) = 0;
     PVIDEO_MODE_INFORMATION GetModeInfo(UINT idx) {return &m_ModeInfo[idx];}
     USHORT GetModeNumber(USHORT idx) {return m_ModeNumbers[idx];}
     USHORT GetCurrentModeIndex(void) {return m_CurrentMode;}
     VOID SetCurrentModeIndex(USHORT idx) {m_CurrentMode = idx;}
-    virtual BOOLEAN EnablePointer(void) = 0;
     virtual NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
                                  _In_ UINT              DstBitPerPixel,
                                  _In_ BYTE*             SrcAddr,
@@ -247,7 +264,9 @@ public:
     virtual NTSTATUS SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape) = 0;
     virtual NTSTATUS SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition) = 0;
     virtual NTSTATUS Escape(_In_ CONST DXGKARG_ESCAPE* pEscap) = 0;
+    NTSTATUS AcquireDisplayInfo(DXGK_DISPLAY_INFORMATION& DispInfo);
     ULONG GetId(void) { return m_Id; }
+    virtual BOOLEAN IsBIOSCompatible() { return TRUE; }
 protected:
     virtual NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo) = 0;
 protected:
@@ -261,7 +280,7 @@ protected:
 };
 
 class VgaDevice  :
-    public HwDeviceIntrface
+    public HwDeviceInterface
 {
 public:
     VgaDevice(_In_ QxlDod* pQxlDod);
@@ -273,7 +292,6 @@ public:
     NTSTATUS SetPowerState(DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWClose(void);
-    BOOLEAN EnablePointer(void) { return TRUE; }
     NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
                                  _In_ UINT              DstBitPerPixel,
                                  _In_ BYTE*             SrcAddr,
@@ -286,9 +304,12 @@ public:
                                  _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation,
                                  _In_ const CURRENT_BDD_MODE* pModeCur);
     VOID BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod);
-    BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
-    VOID DpcRoutine(PVOID);
-    VOID ResetDevice(VOID);
+    QXL_NON_PAGED BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
+    QXL_NON_PAGED VOID DpcRoutine(PVOID);
+    QXL_NON_PAGED VOID ResetDevice(VOID);
+    QXL_NON_PAGED VOID VSyncInterruptPostProcess(_In_ PDXGKRNL_INTERFACE);
+    NTSTATUS AcquireFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode);
+    NTSTATUS ReleaseFrameBuffer(CURRENT_BDD_MODE* pCurrentBddMode);
     NTSTATUS SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape);
     NTSTATUS SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition);
     NTSTATUS Escape(_In_ CONST DXGKARG_ESCAPE* pEscap);
@@ -339,8 +360,10 @@ enum {
 
 #ifdef DBG
 #define RESOURCE_TYPE(res, val) do { res->type = val; } while (0)
+#define INCREMENT_VSYNC_COUNTER(counter) InterlockedIncrement(counter)
 #else
 #define RESOURCE_TYPE(res, val)
+#define INCREMENT_VSYNC_COUNTER(counter)
 #endif
 
 typedef struct Resource Resource;
@@ -434,7 +457,7 @@ typedef struct DpcCbContext {
 #define ALIGN(a, b) (((a) + ((b) - 1)) & ~((b) - 1))
 
 class QxlDevice  :
-    public HwDeviceIntrface
+    public HwDeviceInterface
 {
 public:
     QxlDevice(_In_ QxlDod* pQxlDod);
@@ -446,7 +469,6 @@ public:
     NTSTATUS SetPowerState(DEVICE_POWER_STATE DevicePowerState, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMATION* pDispInfo);
     NTSTATUS HWClose(void);
-    BOOLEAN EnablePointer(void) { return FALSE; }
     NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
                     _In_ UINT              DstBitPerPixel,
                     _In_ BYTE*             SrcAddr,
@@ -459,18 +481,22 @@ public:
                     _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION Rotation,
                     _In_ const CURRENT_BDD_MODE* pModeCur);
     VOID BlackOutScreen(CURRENT_BDD_MODE* pCurrentBddMod);
-    BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
-    VOID DpcRoutine(PVOID);
-    VOID ResetDevice(VOID);
+    QXL_NON_PAGED BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_  ULONG MessageNumber);
+    QXL_NON_PAGED VOID DpcRoutine(PVOID);
+    QXL_NON_PAGED VOID ResetDevice(VOID);
+    QXL_NON_PAGED VOID VSyncInterruptPostProcess(_In_ PDXGKRNL_INTERFACE);
     NTSTATUS SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape);
     NTSTATUS SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERPOSITION* pSetPointerPosition);
     NTSTATUS Escape(_In_ CONST DXGKARG_ESCAPE* pEscap);
+    BOOLEAN IsBIOSCompatible() { return FALSE; }
 protected:
     NTSTATUS GetModeList(DXGK_DISPLAY_INFORMATION* pDispInfo);
     VOID BltBits (BLT_INFO* pDst,
                     CONST BLT_INFO* pSrc,
                     UINT  NumRects,
-                    _In_reads_(NumRects) CONST RECT *pRects);
+                    _In_reads_(NumRects) CONST RECT *pRects,
+                    POINT*   pSourcePoint);
+    void CopyBits(const RECT& rect, const POINT& sourcePoint);
     QXLDrawable *Drawable(UINT8 type,
                     CONST RECT *area,
                     CONST RECT *clip,
@@ -504,6 +530,7 @@ private:
     UINT64 VA(QXLPHYSICAL paddr, UINT8 slot_id);
     QXLPHYSICAL PA(PVOID virt, UINT8 slot_id);
     void InitDeviceMemoryResources(void);
+    void InitMonitorConfig();
     void InitMspace(UINT32 mspace_type, UINT8 *start, size_t capacity);
     void FlushReleaseRing();
     void FreeMem(UINT32 mspace_type, void *ptr);
@@ -527,10 +554,14 @@ private:
     void PutBytesAlign(QXLDataChunk **chunk_ptr, UINT8 **now_ptr,
                             UINT8 **end_ptr, UINT8 *src, int size,
                             size_t alloc_size, uint32_t alignment);
-    BOOLEAN static DpcCallbackEx(PVOID);
-    void DpcCallback(PDPC_CB_CONTEXT);
     void AsyncIo(UCHAR  Port, UCHAR Value);
     void SyncIo(UCHAR  Port, UCHAR Value);
+    NTSTATUS UpdateChildStatus(BOOLEAN connect);
+    NTSTATUS SetCustomDisplay(QXLEscapeSetCustomDisplay* custom_display);
+    void SetMonitorConfig(QXLHead* monitor_config);
+
+    static LONG GetMaxSourceMappingHeight(RECT* DirtyRects, ULONG NumDirtyRects);
+
 private:
     PUCHAR m_IoBase;
     BOOLEAN m_IoMapped;
@@ -574,7 +605,10 @@ private:
     MspaceInfo m_MSInfo[NUM_MSPACES];
 
     UINT64 m_FreeOutputs;
-    UINT32 m_Pending;
+    LONG m_Pending;
+
+    QXLMonitorsConfig* m_monitor_config;
+    QXLPHYSICAL* m_monitor_config_pa;
 };
 
 class QxlDod {
@@ -591,9 +625,12 @@ private:
 
     D3DDDI_VIDEO_PRESENT_SOURCE_ID m_SystemDisplaySourceId;
     DXGKARG_SETPOINTERSHAPE m_PointerShape;
-    HwDeviceIntrface* m_pHWDevice;
-    DWORD m_VgaCompatible;
-    DWORD m_PointerCaps;
+
+    HwDeviceInterface* m_pHWDevice;
+    KTIMER m_VsyncTimer;
+    KDPC   m_VsyncTimerDpc;
+    BOOLEAN m_bVsyncEnabled;
+    LONG m_VsyncFiredCounter;
 public:
     QxlDod(_In_ DEVICE_OBJECT* pPhysicalDeviceObject);
     ~QxlDod(void);
@@ -611,7 +648,7 @@ public:
                          _Out_ ULONG*             pNumberOfChildren);
     NTSTATUS StopDevice(VOID);
     // Must be Non-Paged
-    VOID ResetDevice(VOID);
+    QXL_NON_PAGED VOID ResetDevice(VOID);
 
     NTSTATUS DispatchIoRequest(_In_  ULONG VidPnSourceId,
                                _In_  VIDEO_REQUEST_PACKET* pVideoRequestPacket);
@@ -631,9 +668,9 @@ public:
 
     // Must be Non-Paged
     // BDD doesn't have interrupts, so just returns false
-    BOOLEAN InterruptRoutine(_In_  ULONG MessageNumber);
+    QXL_NON_PAGED BOOLEAN InterruptRoutine(_In_  ULONG MessageNumber);
 
-    VOID DpcRoutine(VOID);
+    QXL_NON_PAGED VOID DpcRoutine(VOID);
 
     // Return DriverCaps, doesn't support other queries though
     NTSTATUS QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO* pQueryAdapterInfo);
@@ -672,7 +709,7 @@ public:
 
     // Must be Non-Paged
     // Call to initialize as part of bugcheck
-    NTSTATUS SystemDisplayEnable(_In_  D3DDDI_VIDEO_PRESENT_TARGET_ID       TargetId,
+    QXL_NON_PAGED NTSTATUS SystemDisplayEnable(_In_  D3DDDI_VIDEO_PRESENT_TARGET_ID       TargetId,
                                  _In_  PDXGKARG_SYSTEM_DISPLAY_ENABLE_FLAGS Flags,
                                  _Out_ UINT*                                pWidth,
                                  _Out_ UINT*                                pHeight,
@@ -680,13 +717,18 @@ public:
 
     // Must be Non-Paged
     // Write out pixels as part of bugcheck
-    VOID SystemDisplayWrite(_In_reads_bytes_(SourceHeight * SourceStride) VOID* pSource,
+    QXL_NON_PAGED VOID SystemDisplayWrite(_In_reads_bytes_(SourceHeight * SourceStride) VOID* pSource,
                                  _In_                                     UINT  SourceWidth,
                                  _In_                                     UINT  SourceHeight,
                                  _In_                                     UINT  SourceStride,
                                  _In_                                     INT   PositionX,
                                  _In_                                     INT   PositionY);
-    PDXGKRNL_INTERFACE GetDxgkInterrface(void) { return &m_DxgkInterface;}
+    PDXGKRNL_INTERFACE GetDxgkInterface(void) { return &m_DxgkInterface;}
+    NTSTATUS AcquireDisplayInfo(DXGK_DISPLAY_INFORMATION& DispInfo)
+    {
+        return m_DxgkInterface.DxgkCbAcquirePostDisplayOwnership(m_DxgkInterface.DeviceHandle, &DispInfo);
+    }
+    VOID EnableVsync(BOOLEAN bEnable);
 private:
     VOID CleanUp(VOID);
     NTSTATUS CheckHardware();
@@ -708,11 +750,14 @@ private:
                                  D3DKMDT_HVIDPNTARGETMODESET hVidPnTargetModeSet,
                                  _In_opt_ CONST D3DKMDT_VIDPN_SOURCE_MODE* pVidPnPinnedSourceModeInfo,
                                  D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId);
-    D3DDDI_VIDEO_PRESENT_SOURCE_ID FindSourceForTarget(D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId, BOOLEAN DefaultToZero);
+    QXL_NON_PAGED D3DDDI_VIDEO_PRESENT_SOURCE_ID FindSourceForTarget(D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId, BOOLEAN DefaultToZero);
     NTSTATUS IsVidPnSourceModeFieldsValid(CONST D3DKMDT_VIDPN_SOURCE_MODE* pSourceMode) const;
     NTSTATUS IsVidPnPathFieldsValid(CONST D3DKMDT_VIDPN_PRESENT_PATH* pPath) const;
     NTSTATUS RegisterHWInfo(_In_ ULONG Id);
-    NTSTATUS ReadConfiguration();
+    QXL_NON_PAGED VOID VsyncTimerProc();
+    static QXL_NON_PAGED VOID VsyncTimerProcGate(_In_ _KDPC *dpc, _In_ PVOID context, _In_ PVOID arg1, _In_ PVOID arg2);
+    QXL_NON_PAGED VOID IndicateVSyncInterrupt();
+    static QXL_NON_PAGED BOOLEAN VsyncTimerSynchRoutine(PVOID context);
 };
 
 NTSTATUS
@@ -726,26 +771,26 @@ UnmapFrameBuffer(
     _In_reads_bytes_(Length) VOID* VirtualAddress,
     _In_                ULONG Length);
 
-UINT BPPFromPixelFormat(D3DDDIFORMAT Format);
-D3DDDIFORMAT PixelFormatFromBPP(UINT BPP);
+QXL_NON_PAGED UINT BPPFromPixelFormat(D3DDDIFORMAT Format);
+QXL_NON_PAGED D3DDDIFORMAT PixelFormatFromBPP(UINT BPP);
 UINT SpiceFromPixelFormat(D3DDDIFORMAT Format);
 
-VOID CopyBitsGeneric(
+QXL_NON_PAGED VOID CopyBitsGeneric(
                         BLT_INFO* pDst,
                         CONST BLT_INFO* pSrc,
                         UINT  NumRects,
                         _In_reads_(NumRects) CONST RECT *pRects);
 
-VOID CopyBits32_32(
+QXL_NON_PAGED VOID CopyBits32_32(
                         BLT_INFO* pDst,
                         CONST BLT_INFO* pSrc,
                         UINT  NumRects,
                         _In_reads_(NumRects) CONST RECT *pRects);
-VOID BltBits (
+QXL_NON_PAGED VOID BltBits (
                         BLT_INFO* pDst,
                         CONST BLT_INFO* pSrc,
                         UINT  NumRects,
                         _In_reads_(NumRects) CONST RECT *pRects);
 
-BYTE* GetRowStart(_In_ CONST BLT_INFO* pBltInfo, CONST RECT* pRect);
-VOID GetPitches(_In_ CONST BLT_INFO* pBltInfo, _Out_ LONG* pPixelPitch, _Out_ LONG* pRowPitch);
+QXL_NON_PAGED BYTE* GetRowStart(_In_ CONST BLT_INFO* pBltInfo, CONST RECT* pRect);
+QXL_NON_PAGED VOID GetPitches(_In_ CONST BLT_INFO* pBltInfo, _Out_ LONG* pPixelPitch, _Out_ LONG* pRowPitch);
