@@ -1978,7 +1978,7 @@ NTSTATUS QxlDod::RegisterHWInfo(_In_ ULONG Id)
 
     UNICODE_STRING ValueQxlDeviceID;
     RtlInitUnicodeString(&ValueQxlDeviceID, L"QxlDeviceID");
-    DWORD DeviceId = Id; // BDD has no access to video memory
+    DWORD DeviceId = Id;
     Status = ZwSetValueKey(DevInstRegKeyHandle,
                            &ValueQxlDeviceID,
                            0,
@@ -1987,7 +1987,7 @@ NTSTATUS QxlDod::RegisterHWInfo(_In_ ULONG Id)
                            sizeof(DeviceId));
     if (!NT_SUCCESS(Status))
     {
-        DbgPrint(TRACE_LEVEL_ERROR, ("ZwSetValueKey for MemorySize failed with Status: 0x%X\n", Status));
+        DbgPrint(TRACE_LEVEL_ERROR, ("ZwSetValueKey for QxlDeviceID failed with Status: 0x%X\n", Status));
         return Status;
     }
 
