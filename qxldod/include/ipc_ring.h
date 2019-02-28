@@ -32,7 +32,7 @@
 #ifndef _H_SPICE_RING
 #define _H_SPICE_RING
 
-#include <include/types.h>
+//#include <include/types.h>
 
 #define _SPICE_MSB_MASK4(x)        \
     (((x) & 0x8) ? 0x8 :    \

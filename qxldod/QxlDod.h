@@ -19,8 +19,8 @@
 #define BITS_PER_BYTE              8
 
 #define POINTER_SIZE               64
-#define MIN_WIDTH_SIZE             1024
-#define MIN_HEIGHT_SIZE            768
+#define MIN_WIDTH_SIZE             640
+#define MIN_HEIGHT_SIZE            480
 #define QXL_BPP                    32
 #define VGA_BPP                    24
 
